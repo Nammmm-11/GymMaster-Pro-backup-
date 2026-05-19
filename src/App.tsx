@@ -45,10 +45,14 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  RefreshCw,
+  Upload,
   Phone,
   Mail,
   ShoppingBag,
   Box,
+  BrainCircuit,
+  Sparkles,
   Minus,
   ArrowRight,
   FileText,
@@ -95,6 +99,8 @@ interface Member {
   revenue?: number;
   avatar?: string;
   faceData?: string;
+  discount: number;
+  paymentMethod: string;
 }
 
 interface KPI {
@@ -148,6 +154,7 @@ interface User {
   username: string;
   role: "ADMIN" | "STAFF" | "PT" | "MEMBER";
   fullName: string;
+  avatar?: string;
 }
 
 interface Notification {
@@ -165,6 +172,8 @@ interface PT {
   isActive: boolean;
   phone: string;
   email: string;
+  username?: string;
+  password?: string;
   avatar?: string;
 }
 
@@ -256,7 +265,10 @@ interface StaffMember {
   hourlyRate: number;
   phoneNumber: string;
   email: string;
+  username?: string;
+  password?: string;
   isActive: boolean;
+  status?: string;
   shiftHours: { start: string; end: string };
 }
 
@@ -631,6 +643,13 @@ const translations: Record<string, any> = {
     deleteFailed: "Không thể xóa hội viên",
     memberValueSub: "Trung bình mỗi hội viên",
     renewalRateSub: "Tỷ lệ gia hạn",
+    aiInsights: "PHÂN TÍCH AI",
+    churnPrediction: "DỰ ĐOÁN BỎ TẬP",
+    behaviorAnalysis: "HÀNH VI KHÁCH HÀNG",
+    workoutSuggestion: "GỢI Ý LỊCH TẬP",
+    packageSuggestion: "GỢI Ý GÓI TẬP",
+    workoutPrompt: "Lập lịch tập Gym",
+    packagePrompt: "Tư vấn chọn gói",
     growthForecast: "Dự báo tăng trưởng",
     checkinUnit: "Đơn vị: Lượt/Tuần",
     growthMsg: "Tăng 5% so với tháng trước",
@@ -967,6 +986,13 @@ const translations: Record<string, any> = {
     staff: "Staff",
     memberValueSub: "Average per member",
     renewalRateSub: "Renewal performance",
+    aiInsights: "AI INSIGHTS",
+    churnPrediction: "CHURN PREDICTION",
+    behaviorAnalysis: "BEHAVIOR ANALYSIS",
+    workoutSuggestion: "WORKOUT SUGGESTION",
+    packageSuggestion: "PACKAGE SUGGESTION",
+    workoutPrompt: "Create workout plan",
+    packagePrompt: "Advise on packages",
     growthForecast: "Growth forecast",
     checkinUnit: "Unit: Check-ins / Week",
     growthMsg: "5% growth vs last month",
@@ -1336,7 +1362,7 @@ const translations: Record<string, any> = {
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "members" | "pt" | "staff" | "pos" | "treasury" | "memberSales" | "invoice-sales" | "invoice-member" | "invoice-expiring" | "invoice-expired" | "facilities" | "maintenance" | "evaluations" | "packages" | "memberPortal" | "finance" | "memberAccounts" | "settings" | "invoices">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "members" | "pt" | "staff" | "pos" | "treasury" | "memberSales" | "invoice-sales" | "invoice-member" | "invoice-expiring" | "invoice-expired" | "facilities" | "maintenance" | "evaluations" | "packages" | "memberPortal" | "finance" | "memberAccounts" | "settings" | "invoices" | "aiAnalytics">("dashboard");
   const [invoiceSubTab, setInvoiceSubTab] = useState<"sales" | "member" | "expiring" | "expired">("sales");
   const [openActionMenuId, setOpenActionMenuId] = useState<number | null>(null);
 
@@ -1382,10 +1408,15 @@ export default function App() {
   const [newRating, setNewRating] = useState(5);
   const [newComment, setNewComment] = useState("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [ratingFilter, setRatingFilter] = useState<number | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<{ role: string; text: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
+  const [aiChurnAnalysis, setAiChurnAnalysis] = useState<Record<number, string>>({});
+  const [aiBehaviorInsight, setAiBehaviorInsight] = useState<string>("");
+  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
   const [ptAssignments, setPtAssignments] = useState<PTAssignment[]>([]);
   const [ptStats, setPtStats] = useState<PTStat[]>([]);
   const [ptSessions, setPtSessions] = useState<TrainingSession[]>([]);
@@ -1415,6 +1446,8 @@ export default function App() {
     hourlyRate: 0,
     phoneNumber: "",
     email: "",
+    username: "",
+    password: "",
     shiftHours: { start: "08:00", end: "17:00" }
   });
   const [newPT, setNewPT] = useState<Partial<PT>>({
@@ -1423,7 +1456,9 @@ export default function App() {
     level: "Junior",
     commissionRate: 0.1,
     phone: "",
-    email: ""
+    email: "",
+    username: "",
+    password: ""
   });
   const [newPTAssignment, setNewPTAssignment] = useState<Partial<PTAssignment>>({
     memberId: 0,
@@ -1681,6 +1716,8 @@ export default function App() {
     faceData: "",
     paymentMethod: "Chuyển khoản",
     discount: 0,
+    username: "",
+    password: "",
   });
 
   const [isFaceAnalyzing, setIsFaceAnalyzing] = useState(false);
@@ -2056,12 +2093,12 @@ export default function App() {
     }
   };
 
-  const handleSendMessage = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!chatInput.trim() || isTyping) return;
+  const handleSendMessage = async (e?: FormEvent, directMessage?: string) => {
+    if (e) e.preventDefault();
+    const userMessage = (directMessage || chatInput).trim();
+    if (!userMessage || isTyping) return;
 
-    const userMessage = chatInput.trim();
-    setChatInput("");
+    if (!directMessage) setChatInput("");
     setChatMessages(prev => [...prev, { role: "user", text: userMessage }]);
     setIsTyping(true);
 
@@ -2273,7 +2310,9 @@ export default function App() {
           level: "Junior",
           commissionRate: 0.1,
           phone: "",
-          email: ""
+          email: "",
+          username: "",
+          password: ""
         });
         fetchData();
       }
@@ -2353,10 +2392,26 @@ export default function App() {
       role: "STAFF",
       baseSalary: 5000000,
       hourlyRate: 30000,
+      phoneNumber: "",
+      email: "",
+      username: "",
+      password: "",
       shiftHours: { start: "08:00", end: "17:00" },
       status: "Active"
     });
     setIsStaffModalOpen(true);
+  };
+
+  const handleSyncPersonnel = async () => {
+    addNotification("BẮT ĐẦU ĐỒNG BỘ DỮ LIỆU NHÂN SỰ...", "info");
+    try {
+      // Simulate API call to sync data
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      addNotification("ĐỒNG BỘ DỮ LIỆU NHÂN VIÊN VÀ HLV THÀNH CÔNG!", "success");
+      fetchData();
+    } catch (error) {
+      addNotification("LỖI ĐỒNG BỘ DỮ LIỆU", "error");
+    }
   };
 
   const handleEditStaff = (member: StaffMember) => {
@@ -2405,6 +2460,10 @@ export default function App() {
           role: "STAFF",
           baseSalary: 5000000,
           hourlyRate: 30000,
+          phoneNumber: "",
+          email: "",
+          username: "",
+          password: "",
           shiftHours: { start: "08:00", end: "17:00" },
           status: "Active"
         });
@@ -2795,6 +2854,11 @@ export default function App() {
             expiryDate: "",
             avatar: "",
             faceData: "",
+            createdBy: "",
+            paymentMethod: "Chuyển khoản",
+            discount: 0,
+            username: "",
+            password: "",
           });
         },
         "danger"
@@ -2869,6 +2933,8 @@ export default function App() {
               faceData: "",
               paymentMethod: "Chuyển khoản",
               discount: 0,
+              username: "",
+              password: "",
             });
           } else {
             const error = await res.json();
@@ -3281,6 +3347,7 @@ export default function App() {
               {[
                 { id: "memberPortal", label: t('memberPortal'), icon: ShieldUser, role: "MEMBER" },
                 { id: "dashboard", label: t('dashboard'), icon: LayoutDashboard, role: "STAFF" },
+                { id: "aiAnalytics", label: t('aiInsights'), icon: BrainCircuit, role: "STAFF" },
                 { 
                   id: "memberMgmt", 
                   label: t('memberMgmt'), 
@@ -3505,6 +3572,7 @@ export default function App() {
                   {[
                     { id: "memberPortal", label: t('memberPortal'), icon: ShieldUser, role: "MEMBER" },
                     { id: "dashboard", label: t('dashboard'), icon: LayoutDashboard, role: "STAFF" },
+                    { id: "aiAnalytics", label: t('aiInsights'), icon: BrainCircuit, role: "STAFF" },
                     { 
                       id: "memberMgmt", 
                       label: t('memberMgmt'), 
@@ -3817,6 +3885,10 @@ export default function App() {
                       ? t('finance')
                     : activeTab === "memberSales"
                       ? t('memberSales')
+                    : activeTab === "evaluations"
+                      ? "ĐÁNH GIÁ DỊCH VỤ"
+                    : activeTab === "aiAnalytics"
+                      ? t('aiInsights')
                     : activeTab === "invoice-sales"
                       ? "HÓA ĐƠN BÁN LẺ"
                     : activeTab === "invoice-member"
@@ -3869,6 +3941,13 @@ export default function App() {
                     {activeTab === "pt" && (
                       <div className="flex items-center gap-2 md:ml-auto">
                         <button
+                          onClick={handleSyncPersonnel}
+                          className="h-10 md:h-12 px-4 md:px-6 bg-zinc-900 text-zinc-400 border border-white/5 rounded-xl md:rounded-2xl hover:bg-zinc-800 transition-all flex items-center justify-center gap-2 text-[9px] md:text-[10px] font-black uppercase tracking-widest active:scale-95"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                          ĐỒNG BỘ
+                        </button>
+                        <button
                           onClick={openAddPTModal}
                           className="h-10 md:h-12 px-4 md:px-6 bg-[#CCFF00] text-black rounded-xl md:rounded-2xl hover:bg-white transition-all shadow-xl shadow-[#CCFF00]/10 flex items-center justify-center gap-2 text-[9px] md:text-[10px] font-black uppercase tracking-widest active:scale-95"
                         >
@@ -3879,6 +3958,13 @@ export default function App() {
                     )}
                     {activeTab === "staff" && (
                       <div className="flex items-center gap-2 md:ml-auto">
+                        <button
+                          onClick={handleSyncPersonnel}
+                          className="h-10 md:h-12 px-4 md:px-6 bg-zinc-900 text-zinc-400 border border-white/5 rounded-xl md:rounded-2xl hover:bg-zinc-800 transition-all flex items-center justify-center gap-2 text-[9px] md:text-[10px] font-black uppercase tracking-widest active:scale-95"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                          ĐỒNG BỘ
+                        </button>
                         <button
                           onClick={() => setIsPayrollModalOpen(true)}
                           className="h-10 md:h-12 px-4 md:px-6 bg-white text-black rounded-xl md:rounded-2xl hover:bg-[#CCFF00] transition-all shadow-xl flex items-center justify-center gap-2 text-[9px] md:text-[10px] font-black uppercase tracking-widest active:scale-95"
@@ -3895,6 +3981,7 @@ export default function App() {
                         </button>
                       </div>
                     )}
+                    {activeTab === "evaluations" && null}
                     {activeTab === "treasury" && (
                       <div className="flex items-center gap-2 md:ml-auto">
                         <button 
@@ -4092,10 +4179,9 @@ export default function App() {
                       <Trophy className="w-6 h-6 text-[#CCFF00]" />
                     </div>
                     <div>
-                      <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1 italic">TỔNG SỐ BUỔI</p>
+                      <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1 italic">TỔNG BUỔI TẬP</p>
                       <h4 className="text-4xl font-black italic uppercase tracking-tighter text-white">
                         {memberHistory.length}
-                        <span className="text-sm text-[#CCFF00] ml-2">SESSIONS</span>
                       </h4>
                     </div>
                   </div>
@@ -4110,6 +4196,45 @@ export default function App() {
                         {members.find(m => m.id === user.id)?.registrationDate?.split('-').reverse().join('/') || "N/A"}
                       </h4>
                     </div>
+                  </div>
+                </div>
+
+                {/* AI Advisor - NEW Bento for Member */}
+                <div className="lg:col-span-2 bg-[#CCFF00]/10 border border-[#CCFF00]/20 rounded-[2.5rem] p-8 shadow-xl relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <Sparkles className="w-12 h-12 text-[#CCFF00]" />
+                  </div>
+                  <h3 className="text-xl font-black italic uppercase text-white tracking-widest mb-4 flex items-center gap-3">
+                     <BrainCircuit className="w-5 h-5 text-[#CCFF00]" />
+                     GỢI Ý CÁ NHÂN HÓA AI
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <button 
+                      onClick={() => {
+                        setIsChatOpen(true);
+                        handleSendMessage(undefined, "Gợi ý lịch tập Gym cho tôi dựa trên mục tiêu tăng cơ");
+                      }}
+                      className="bg-black/40 hover:bg-black/60 border border-white/5 rounded-2xl p-4 text-left transition-all group/btn"
+                    >
+                      <p className="text-[9px] font-black text-[#CCFF00] mb-1 italic tracking-widest uppercase">WORKOUT_PLAN</p>
+                      <p className="text-xs font-black text-white italic uppercase flex items-center justify-between">
+                        {t('workoutPrompt')}
+                        <ArrowRight className="w-3 h-3 translate-x-0 group-hover/btn:translate-x-1 transition-transform" />
+                      </p>
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setIsChatOpen(true);
+                        handleSendMessage(undefined, "Tư vấn chọn gói tập phù hợp nhất với tần suất tập 3 buổi/tuần");
+                      }}
+                      className="bg-black/40 hover:bg-black/60 border border-white/5 rounded-2xl p-4 text-left transition-all group/btn"
+                    >
+                      <p className="text-[9px] font-black text-[#CCFF00] mb-1 italic tracking-widest uppercase">SMART_PICK</p>
+                      <p className="text-xs font-black text-white italic uppercase flex items-center justify-between">
+                        {t('packagePrompt')}
+                        <ArrowRight className="w-3 h-3 translate-x-0 group-hover/btn:translate-x-1 transition-transform" />
+                      </p>
+                    </button>
                   </div>
                 </div>
 
@@ -4137,17 +4262,6 @@ export default function App() {
                     >
                       <Wallet className="w-4 h-4" />
                       LỊCH SỬ THANH TOÁN
-                    </button>
-                    <button
-                      onClick={() => setProfileActiveTab("review")}
-                      className={`flex-1 flex items-center justify-center gap-3 py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] italic transition-all ${
-                        profileActiveTab === "review"
-                          ? "bg-[#CCFF00] text-black shadow-lg shadow-[#CCFF00]/10"
-                          : "text-zinc-500 hover:text-white"
-                      }`}
-                    >
-                      <Star className="w-4 h-4" />
-                      {t('evaluations')}
                     </button>
                   </div>
 
@@ -4202,7 +4316,7 @@ export default function App() {
                             </div>
                           )}
                         </div>
-                      ) : profileActiveTab === "payment" ? (
+                      ) : (
                         <div className="space-y-4">
                           {memberPaymentHistory.length > 0 ? (
                             memberPaymentHistory.map((sale) => (
@@ -4254,148 +4368,8 @@ export default function App() {
                             </div>
                           )}
                         </div>
-                      ) : (
-                        <div className="space-y-12">
-                           <div className="bg-zinc-950/50 border border-white/5 rounded-[2.5rem] p-10">
-                              <h4 className="text-2xl font-black italic uppercase text-[#CCFF00] tracking-tighter mb-8">{t('leaveReview')}</h4>
-                              <form onSubmit={handleSubmitEvaluation} className="space-y-6">
-                                <div className="flex flex-col gap-2">
-                                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest italic">{t('rating')}</label>
-                                  <div className="flex gap-2">
-                                    {[1, 2, 3, 4, 5].map((s) => (
-                                      <button
-                                        key={s}
-                                        type="button"
-                                        onClick={() => setNewRating(s)}
-                                        className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${
-                                          newRating >= s ? "bg-[#CCFF00] text-black" : "bg-white/5 text-zinc-600 hover:bg-white/10"
-                                        }`}
-                                      >
-                                        <Star className={`w-5 h-5 ${newRating >= s ? "fill-current" : ""}`} />
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div className="flex flex-col gap-3">
-                                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest italic">{t('suggestions')}</label>
-                                  <div className="flex flex-wrap gap-2">
-                                    {[1, 2, 3, 4, 5].map((idx) => (
-                                      <button
-                                        key={idx}
-                                        type="button"
-                                        onClick={() => {
-                                          const suggestion = t(`suggestion${idx}` as any);
-                                          if (newComment.includes(suggestion)) return;
-                                          setNewComment(prev => prev ? `${prev}, ${suggestion}` : suggestion);
-                                        }}
-                                        className="px-4 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] font-bold text-zinc-400 hover:bg-[#CCFF00]/10 hover:text-[#CCFF00] hover:border-[#CCFF00]/30 transition-all active:scale-95"
-                                      >
-                                        + {t(`suggestion${idx}` as any)}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div className="flex flex-col gap-2">
-                                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest italic">{t('comment')}</label>
-                                  <textarea
-                                    value={newComment}
-                                    onChange={(e) => setNewComment(e.target.value)}
-                                    placeholder="..."
-                                    className="w-full bg-white/5 border border-white/10 rounded-[1.5rem] p-6 text-white text-sm focus:outline-none focus:border-[#CCFF00]/50 min-h-[120px] transition-all"
-                                  />
-                                </div>
-                                <button
-                                  type="submit"
-                                  disabled={isSubmittingReview}
-                                  className="w-full py-5 bg-[#CCFF00] text-black font-black uppercase tracking-[0.2em] rounded-2xl hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-[#CCFF00]/10 flex items-center justify-center gap-3"
-                                >
-                                  {isSubmittingReview ? <Loader2 className="w-5 h-5 animate-spin" /> : <Star className="w-5 h-5" />}
-                                  {t('submitReview')}
-                                </button>
-                              </form>
-                           </div>
-
-                           <div className="space-y-6">
-                              <h4 className="text-xl font-black italic uppercase text-white tracking-widest px-4">{t('yourReviews')}</h4>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {memberEvaluations.length > 0 ? (
-                                  memberEvaluations.map((review) => (
-                                    <div key={review.id} className="p-8 bg-white/5 border border-white/5 rounded-[2.5rem] group hover:border-[#CCFF00]/20 transition-all flex flex-col gap-4">
-                                      <div className="flex justify-between items-start">
-                                        <div className="flex gap-1">
-                                          {[1, 2, 3, 4, 5].map((s) => (
-                                            <Star key={s} className={`w-3.5 h-3.5 ${review.rating >= s ? "text-[#CCFF00] fill-[#CCFF00]" : "text-zinc-800"}`} />
-                                          ))}
-                                        </div>
-                                        <span className="text-[10px] font-mono text-zinc-600">{review.date}</span>
-                                      </div>
-                                      <p className="text-zinc-300 italic text-sm leading-relaxed">&ldquo;{review.comment}&rdquo;</p>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <div className="col-span-full py-16 flex flex-col items-center justify-center text-center opacity-30 italic">
-                                     <p className="text-zinc-500 text-[10px] uppercase tracking-[0.2em]">{t('noEvaluations')}</p>
-                                  </div>
-                                )}
-                              </div>
-                           </div>
-                        </div>
                       )}
                     </motion.div>
-                  </div>
-                </div>
-
-                {/* Packages for Renewal / Purchase */}
-                <div className="lg:col-span-4 space-y-8 mt-12 bg-zinc-900/20 p-10 rounded-[3rem] border border-white/5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-3xl font-black italic uppercase text-white tracking-widest flex items-center gap-6">
-                      <div className="w-12 h-[2px] bg-[#CCFF00]"></div>
-                      {members.find(m => m.id === user.id)?.package === "CHƯA CÓ" ? t('buyPackage') : t('renewPackage')}
-                    </h3>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {packages.filter(p => !p.name.includes("MỜI") && p.status === "Mở bán").map(pkg => (
-                      <div key={pkg.id} className="bg-zinc-900 border border-white/5 rounded-[2.5rem] p-8 hover:border-[#CCFF00]/40 transition-all group relative overflow-hidden flex flex-col">
-                        <div className="absolute -top-10 -right-10 text-[6rem] font-black text-white/[0.02] group-hover:text-[#CCFF00]/5 transition-colors italic pointer-events-none select-none uppercase">
-                          GYM
-                        </div>
-                        <h4 className="text-xl font-black italic uppercase tracking-tighter text-white mb-2 relative z-10">{pkg.name}</h4>
-                        <div className="flex items-center gap-2 mb-4 relative z-10">
-                          <Clock className="w-3.5 h-3.5 text-[#CCFF00]" />
-                          <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{t(pkg.duration)}</span>
-                        </div>
-                        <p className="text-[11px] text-zinc-500 leading-relaxed mb-8 h-12 line-clamp-2 italic relative z-10">
-                          {pkg.description}
-                        </p>
-                        
-                        <div className="mt-auto relative z-10">
-                          <p className="text-3xl font-black text-[#CCFF00] italic tracking-tighter mb-6">
-                            {pkg.price.toLocaleString()}đ
-                          </p>
-                          <button 
-                            onClick={() => {
-                              setSelectedRenewPackage(pkg);
-                              setRenewalStep(1);
-                              const currentMember = members.find(m => m.id === user.id);
-                              if (currentMember && currentMember.status === 'Hoạt động' && currentMember.expiryDate) {
-                                // If active, default to next day after current expiry
-                                const expiry = new Date(currentMember.expiryDate);
-                                expiry.setDate(expiry.getDate() + 1);
-                                setRenewalDate(expiry.toISOString().split('T')[0]);
-                              } else {
-                                // Default to today
-                                setRenewalDate(new Date().toISOString().split('T')[0]);
-                              }
-                              setIsRenewalModalOpen(true);
-                            }}
-                            className="w-full py-5 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-white hover:bg-[#CCFF00] hover:text-black hover:border-[#CCFF00] transition-all shadow-xl"
-                          >
-                            {members.find(m => m.id === user.id)?.package === "CHƯA CÓ" ? t('buyNow') : t('renewNow')}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 </div>
               </div>
@@ -4576,9 +4550,10 @@ export default function App() {
                       <thead className="sticky top-0 bg-zinc-950 z-10">
                         <tr className="text-xs font-black font-mono text-zinc-400 uppercase border-b border-white/10 bg-white/[0.01]">
                           <th className="px-8 py-5 tracking-widest italic">{t('fullName')}</th>
-                          <th className="px-8 py-5 tracking-widest italic text-center">{t('username')}</th>
+                          <th className="px-8 py-5 tracking-widest italic text-center">ID TÀI KHOẢN</th>
+                          <th className="px-8 py-5 tracking-widest italic text-center">MẬT KHẨU</th>
                           <th className="px-8 py-5 tracking-widest italic text-center">{t('status')}</th>
-                          <th className="px-8 py-5 tracking-widest italic text-right">{t('actions')}</th>
+                          <th className="px-8 py-5 tracking-widest italic text-right">XEM</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
@@ -4598,6 +4573,11 @@ export default function App() {
                               </span>
                             </td>
                             <td className="px-8 py-5 text-center">
+                              <span className="text-[10px] font-mono text-zinc-400 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
+                                {visiblePasswords[`m-${member.id}`] ? (member.password || '123456') : '••••••••'}
+                              </span>
+                            </td>
+                            <td className="px-8 py-5 text-center">
                               <span className={`text-[8px] font-black px-2.5 py-1 rounded-md uppercase tracking-wider ${member.status === 'Hoạt động' ? 'bg-[#CCFF00]/10 text-[#CCFF00]' : 'bg-red-500/10 text-red-500'}`}>
                                 {member.status === 'Hoạt động' ? t('statusActive') : t('statusExpired')}
                               </span>
@@ -4605,12 +4585,14 @@ export default function App() {
                             <td className="px-8 py-5 text-right">
                                <button 
                                  onClick={() => {
-                                   setEditingMember(member);
-                                   setIsEditModalOpen(true);
+                                   setVisiblePasswords(prev => ({
+                                     ...prev,
+                                     [`m-${member.id}`]: !prev[`m-${member.id}`]
+                                   }));
                                  }}
                                  className="p-2.5 bg-zinc-900 text-zinc-500 hover:text-[#CCFF00] rounded-xl border border-white/10 transition-all hover:bg-zinc-800"
                                >
-                                  <Settings className="w-4 h-4" />
+                                  {visiblePasswords[`m-${member.id}`] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                </button>
                             </td>
                           </tr>
@@ -4739,29 +4721,7 @@ export default function App() {
                           </div>
                         )}
 
-                        {user.role === "MEMBER" && (
-                          <div className="w-full mt-4">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedRenewPackage(pkg);
-                                setRenewalStep(1);
-                                const currentMember = members.find(m => m.id === user.id);
-                                if (currentMember && currentMember.status === 'Hoạt động' && currentMember.expiryDate) {
-                                  const expiry = new Date(currentMember.expiryDate);
-                                  expiry.setDate(expiry.getDate() + 1);
-                                  setRenewalDate(expiry.toISOString().split('T')[0]);
-                                } else {
-                                  setRenewalDate(new Date().toISOString().split('T')[0]);
-                                }
-                                setIsRenewalModalOpen(true);
-                              }}
-                              className="w-full py-3 bg-[#CCFF00] text-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white transition-all shadow-xl shadow-[#CCFF00]/10 active:scale-95"
-                            >
-                              {members.find(m => m.id === user.id)?.package === "CHƯA CÓ" ? t('buyPackage') : t('renewNow')}
-                            </button>
-                          </div>
-                        )}
+                        {/* user.role === "MEMBER" package renewal button removed per request */}
                       </div>
                     </div>
                   </motion.div>
@@ -5021,6 +4981,8 @@ export default function App() {
                     <thead className="sticky top-0 bg-zinc-950 z-10">
                       <tr className="text-sm font-black font-mono text-zinc-400 uppercase border-b border-white/5 bg-white/[0.01]">
                         <th className="px-8 py-5 tracking-[0.2em]">{t('fullName')}</th>
+                        <th className="px-8 py-5 tracking-[0.2em]">TÀI KHOẢN</th>
+                        <th className="px-8 py-5 tracking-[0.2em]">MẬT KHẨU</th>
                         <th className="px-8 py-5 tracking-[0.2em]">{t('expertise')}</th>
                         <th className="px-8 py-5 tracking-[0.2em]">{t('ptLevel')}</th>
                         <th className="px-8 py-5 tracking-[0.2em]">{t('ptCommission')}</th>
@@ -5033,6 +4995,14 @@ export default function App() {
                           <td className="px-8 py-5 whitespace-nowrap">
                             <div className="font-black text-white uppercase italic tracking-tight text-base">{trainer.fullName}</div>
                             <div className="text-xs font-black font-mono text-zinc-600">{trainer.phone}</div>
+                          </td>
+                          <td className="px-8 py-5 text-center">
+                            <span className="text-[10px] font-mono text-zinc-400">{trainer.username || 'N/A'}</span>
+                          </td>
+                          <td className="px-8 py-5 text-center">
+                            <span className="text-[10px] font-mono text-zinc-400">
+                              {visiblePasswords[`p-${trainer.id}`] ? (trainer.password || '123456') : '••••••••'}
+                            </span>
                           </td>
                           <td className="px-8 py-5">
                             <div className="flex flex-wrap gap-1">
@@ -5047,6 +5017,12 @@ export default function App() {
                           <td className="px-8 py-5 text-sm font-mono text-[#CCFF00] font-black">{(trainer.commissionRate * 100).toFixed(0)}%</td>
                           <td className="px-8 py-5 text-right">
                             <div className="flex justify-end gap-2">
+                              <button 
+                                onClick={() => setVisiblePasswords(prev => ({...prev, [`p-${trainer.id}`]: !prev[`p-${trainer.id}`]}))}
+                                className="p-2.5 bg-zinc-900 text-zinc-500 hover:text-[#CCFF00] rounded-xl border border-white/10 transition-all hover:bg-zinc-800"
+                              >
+                                {visiblePasswords[`p-${trainer.id}`] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
                               <button 
                                 onClick={() => handleViewPTDetails(trainer)}
                                 title="Xem chi tiết"
@@ -5098,6 +5074,8 @@ export default function App() {
                     <thead className="sticky top-0 bg-zinc-950 z-10">
                       <tr className="text-sm font-black font-mono text-zinc-400 uppercase border-b border-white/5">
                         <th className="px-8 py-5 tracking-[0.2em]">{t('fullName')}</th>
+                        <th className="px-8 py-5 tracking-[0.2em]">TÀI KHOẢN</th>
+                        <th className="px-8 py-5 tracking-[0.2em]">MẬT KHẨU</th>
                         <th className="px-8 py-5 tracking-[0.2em]">{t('positions')}</th>
                         <th className="px-8 py-5 tracking-[0.2em]">{t('shifts')}</th>
                         <th className="px-8 py-5 tracking-[0.2em]">{t('staffStatus')}</th>
@@ -5113,6 +5091,14 @@ export default function App() {
                              <td className="px-8 py-5">
                               <div className="font-black text-white uppercase italic tracking-tight text-base">{staff.fullName}</div>
                               <div className="text-xs font-black font-mono text-zinc-600">{staff.role}</div>
+                            </td>
+                            <td className="px-8 py-5 text-center">
+                              <span className="text-[10px] font-mono text-zinc-400">{staff.username || 'N/A'}</span>
+                            </td>
+                            <td className="px-8 py-5 text-center">
+                              <span className="text-[10px] font-mono text-zinc-400">
+                                {visiblePasswords[`s-${staff.id}`] ? (staff.password || '123456') : '••••••••'}
+                              </span>
                             </td>
                             <td className="px-8 py-5">
                               <div className="text-xs text-zinc-400 uppercase font-black">{staff.position}</div>
@@ -5156,6 +5142,12 @@ export default function App() {
                             <td className="px-8 py-5 text-right">
                               <div className="flex justify-end gap-2">
                                 <button 
+                                  onClick={() => setVisiblePasswords(prev => ({...prev, [`s-${staff.id}`]: !prev[`s-${staff.id}`]}))}
+                                  className="p-2.5 bg-zinc-900 text-zinc-500 hover:text-[#CCFF00] rounded-xl border border-white/10 transition-all hover:bg-zinc-800"
+                                >
+                                  {visiblePasswords[`s-${staff.id}`] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                                <button 
                                   onClick={() => handleEditStaff(staff)}
                                   className="p-2.5 bg-zinc-900 text-zinc-500 hover:text-[#CCFF00] rounded-xl border border-white/10 transition-all hover:bg-zinc-800"
                                 >
@@ -5179,13 +5171,35 @@ export default function App() {
             </div>
           ) : activeTab === "evaluations" ? (
             <div className="space-y-12 pb-20 overflow-y-auto h-full custom-scrollbar px-4 md:px-0">
-               <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                   <div className="space-y-2">
-                    <h2 className="text-4xl md:text-5xl font-black italic uppercase text-white tracking-tighter leading-none">{t('evaluations')}</h2>
-                    <p className="text-[10px] font-black font-mono text-zinc-500 uppercase tracking-[0.4em] italic">{t('memberEvaluations')}</p>
+                    <h2 className="text-4xl md:text-5xl font-black italic uppercase text-white tracking-tighter leading-none">ĐÁNH GIÁ DỊCH VỤ</h2>
+                  </div>
+                  
+                  {/* Rating Filter */}
+                  <div className="flex flex-wrap items-center gap-2 bg-white/5 p-2 rounded-2xl border border-white/5">
+                    <button 
+                      onClick={() => setRatingFilter(null)}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${ratingFilter === null ? 'bg-[#CCFF00] text-black' : 'text-zinc-500 hover:text-white'}`}
+                    >
+                      TẤT CẢ
+                    </button>
+                    {[5, 4, 3, 2, 1].map(stars => (
+                      <button
+                        key={stars}
+                        onClick={() => setRatingFilter(stars === ratingFilter ? null : stars)}
+                        className={`px-4 py-2 rounded-xl flex items-center gap-2 transition-all border ${
+                          ratingFilter === stars 
+                            ? 'bg-[#CCFF00] text-black border-[#CCFF00]' 
+                            : 'bg-zinc-900/50 text-zinc-500 border-white/5 hover:border-white/20 hover:text-white'
+                        }`}
+                      >
+                        <span className="text-[10px] font-black">{stars}</span>
+                        <Star className={`w-3 h-3 ${ratingFilter === stars ? 'fill-black' : 'fill-zinc-500'}`} />
+                      </button>
+                    ))}
                   </div>
                </div>
-
                {user?.role === "MEMBER" && (
                  <div className="bg-zinc-950/50 border border-white/5 rounded-[2.5rem] p-8 max-w-2xl">
                     <h4 className="text-xl font-black italic uppercase text-[#CCFF00] tracking-tighter mb-6">{t('leaveReview')}</h4>
@@ -5247,8 +5261,12 @@ export default function App() {
                )}
 
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {evaluations.length > 0 ? (
-                    evaluations.map((review) => (
+                  {evaluations
+                    .filter(review => ratingFilter === null || review.rating === ratingFilter)
+                    .length > 0 ? (
+                    evaluations
+                      .filter(review => ratingFilter === null || review.rating === ratingFilter)
+                      .map((review) => (
                       <div key={review.id} className="bg-zinc-900 border border-white/5 rounded-[2.5rem] p-8 group hover:border-[#CCFF00]/30 transition-all shadow-xl relative overflow-hidden">
                          <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-20 transition-opacity">
                             <Star className="w-20 h-20 text-[#CCFF00]" />
@@ -6442,6 +6460,110 @@ export default function App() {
                  </div>
               </div>
             </motion.div>
+          ) : activeTab === "aiAnalytics" ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-8 pb-12"
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* behavior analysis */}
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="bg-zinc-950 border border-white/5 rounded-[3rem] p-10 relative overflow-hidden group">
+                    <div className="absolute -top-10 -right-10 text-[10rem] font-black text-[#CCFF00]/5 italic pointer-events-none group-hover:scale-110 transition-transform duration-700">AI</div>
+                    <div className="relative z-10">
+                      <div className="flex items-center gap-4 mb-8">
+                        <div className="w-16 h-16 bg-[#CCFF00]/10 rounded-[2rem] flex items-center justify-center border border-[#CCFF00]/20">
+                          <Sparkles className="w-8 h-8 text-[#CCFF00]" />
+                        </div>
+                        <div>
+                          <h3 className="text-3xl font-black italic uppercase text-white tracking-tighter">PHÂN TÍCH HÀNH VI</h3>
+                          <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mt-1">DỰ KIẾN THEO THỜI GIAN THỰC</p>
+                        </div>
+                        <button 
+                          onClick={async () => {
+                            setIsAiAnalyzing(true);
+                            try {
+                              const res = await fetch("/api/ai/behavior-analysis", { method: "POST" });
+                              const data = await res.json();
+                              setAiBehaviorInsight(data.analysis);
+                            } finally {
+                              setIsAiAnalyzing(false);
+                            }
+                          }}
+                          disabled={isAiAnalyzing}
+                          className="ml-auto px-6 py-3 bg-[#CCFF00] text-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-[#CCFF00]/10"
+                        >
+                          {isAiAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : "PHÂN TÍCH NGAY"}
+                        </button>
+                      </div>
+                      
+                      <div className="bg-white/[0.02] border border-white/5 rounded-[2rem] p-8 min-h-[300px]">
+                        {aiBehaviorInsight ? (
+                          <div className="markdown-body text-zinc-400 prose prose-invert max-w-none">
+                            <Markdown>{aiBehaviorInsight}</Markdown>
+                          </div>
+                        ) : (
+                          <div className="h-full flex flex-col items-center justify-center py-20 text-center">
+                            <BrainCircuit className="w-12 h-12 text-zinc-800 mb-4" />
+                            <p className="text-zinc-600 italic text-sm">Chưa có dữ liệu phân tích. Hãy nhấn nút để bắt đầu.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Churn Prediction List */}
+                <div className="space-y-6">
+                  <div className="bg-zinc-950 border border-white/5 rounded-[3rem] p-8">
+                    <h3 className="text-xl font-black italic uppercase text-white mb-6 px-2 flex items-center justify-between">
+                      DỰ ĐOÁN RỜI BỎ
+                      <span className="text-[10px] font-mono text-zinc-600 tracking-widest">TOP RISK</span>
+                    </h3>
+                    <div className="space-y-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
+                      {members.filter(m => m.status === 'Hoạt động').slice(0, 10).map((member) => (
+                        <div key={member.id} className="p-6 bg-white/[0.02] border border-white/5 rounded-2xl group hover:border-[#CCFF00]/20 transition-all">
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-zinc-900 flex items-center justify-center text-xs font-black text-white group-hover:bg-[#CCFF00] group-hover:text-black transition-colors">{member.fullName.charAt(0)}</div>
+                              <div>
+                                <p className="text-xs font-black uppercase text-white group-hover:text-[#CCFF00] transition-colors">{member.fullName}</p>
+                                <p className="text-[9px] font-mono text-zinc-600">{member.package}</p>
+                              </div>
+                            </div>
+                            <button 
+                              onClick={async () => {
+                                setIsAiAnalyzing(true);
+                                try {
+                                  const res = await fetch("/api/ai/churn-prediction", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ memberId: member.id })
+                                  });
+                                  const data = await res.json();
+                                  setAiChurnAnalysis(prev => ({ ...prev, [member.id]: data.analysis }));
+                                } finally {
+                                  setIsAiAnalyzing(false);
+                                }
+                              }}
+                              className="p-2 bg-white/5 rounded-lg text-zinc-500 hover:text-[#CCFF00] hover:bg-[#CCFF00]/10 transition-all"
+                            >
+                              <BrainCircuit className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {aiChurnAnalysis[member.id] && (
+                            <div className="mt-4 p-4 bg-black/40 rounded-xl border border-white/5 text-[10px] text-zinc-400 italic">
+                               <Markdown>{aiChurnAnalysis[member.id]}</Markdown>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
           ) : activeTab === "settings" ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -6566,7 +6688,7 @@ export default function App() {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => setActiveTab(item.id as any)}
                 className={`relative flex flex-col items-center justify-center w-[60px] h-[60px] rounded-[1.6rem] transition-all duration-300 ${
                   IsActive ? 'text-[#CCFF00]' : 'text-zinc-500 hover:text-white'
                 }`}
@@ -8210,6 +8332,47 @@ export default function App() {
                     </select>
                   </div>
                   <div>
+                    <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-2">Số điện thoại</label>
+                    <input
+                      required
+                      type="tel"
+                      value={newStaff.phoneNumber}
+                      onChange={e => setNewStaff({ ...newStaff, phoneNumber: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 p-4 rounded-xl focus:border-[#CCFF00] outline-none text-white text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-2">Email</label>
+                    <input
+                      required
+                      type="email"
+                      value={newStaff.email}
+                      onChange={e => setNewStaff({ ...newStaff, email: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 p-4 rounded-xl focus:border-[#CCFF00] outline-none text-white text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-2">Tên đăng nhập</label>
+                    <input
+                      required
+                      type="text"
+                      value={newStaff.username}
+                      onChange={e => setNewStaff({ ...newStaff, username: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 p-4 rounded-xl focus:border-[#CCFF00] outline-none text-[#CCFF00] text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-2">Mật khẩu</label>
+                    <input
+                      required={!newStaff.id}
+                      type="password"
+                      placeholder={newStaff.id ? "(Để trống nếu không đổi)" : "Mật khẩu đăng nhập"}
+                      value={newStaff.password}
+                      onChange={e => setNewStaff({ ...newStaff, password: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 p-4 rounded-xl focus:border-[#CCFF00] outline-none text-white text-sm"
+                    />
+                  </div>
+                  <div>
                     <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-2">Lương cơ bản</label>
                     <input
                       required
@@ -8341,6 +8504,43 @@ export default function App() {
                       type="tel"
                       value={newPT.phone}
                       onChange={(e) => setNewPT({ ...newPT, phone: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 px-5 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-sm font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline underline-offset-4">
+                      EMAIL
+                    </label>
+                    <input
+                      required
+                      type="email"
+                      value={newPT.email}
+                      onChange={(e) => setNewPT({ ...newPT, email: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 px-5 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-sm font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline underline-offset-4">
+                      TÊN ĐĂNG NHẬP
+                    </label>
+                    <input
+                      required
+                      type="text"
+                      value={newPT.username}
+                      onChange={(e) => setNewPT({ ...newPT, username: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 px-5 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-sm font-mono text-[#CCFF00]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline underline-offset-4">
+                      MẬT KHẨU
+                    </label>
+                    <input
+                      required={!newPT.id}
+                      type="password"
+                      placeholder={newPT.id ? "(KHÔNG ĐỔI)" : "MẬT KHẨU"}
+                      value={newPT.password}
+                      onChange={(e) => setNewPT({ ...newPT, password: e.target.value })}
                       className="w-full bg-white/5 border border-white/10 px-5 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-sm font-mono"
                     />
                   </div>
@@ -8719,24 +8919,52 @@ export default function App() {
               </h3>
               <form onSubmit={handleAddProduct} className="space-y-6">
                 <div>
-                  <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline text-zinc-400">Ảnh sản phẩm (URL)</label>
-                  <div className="flex gap-4">
-                    <div className="w-16 h-16 bg-zinc-900 rounded-xl border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
-                      {newProduct.image ? (
-                        <img src={newProduct.image} alt="Preview" className="w-full h-full object-cover" />
-                      ) : (
-                        <Zap className="w-6 h-6 text-zinc-800" />
-                      )}
+                  <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline text-zinc-400">Ảnh sản phẩm</label>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex gap-4 items-center">
+                      <div className="w-20 h-20 bg-zinc-900 rounded-xl border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                        {newProduct.image ? (
+                          <img src={newProduct.image} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <Zap className="w-8 h-8 text-zinc-800" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          id="product-image-upload"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setNewProduct({ ...newProduct, image: reader.result as string });
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                        <label 
+                          htmlFor="product-image-upload"
+                          className="flex items-center justify-center gap-2 w-full py-4 bg-white/5 border border-dashed border-white/20 rounded-xl cursor-pointer hover:bg-white/10 hover:border-[#CCFF00]/50 transition-all text-[10px] font-black uppercase text-zinc-400 hover:text-[#CCFF00]"
+                        >
+                          <Upload className="w-4 h-4" />
+                          CHỌN FILE ẢNH
+                        </label>
+                      </div>
                     </div>
-                    <input
-                      type="text"
-                      placeholder="https://images.unsplash.com/..."
-                      value={newProduct.image}
-                      onChange={e => setNewProduct({...newProduct, image: e.target.value})}
-                      className="flex-1 bg-white/5 border border-white/10 px-4 py-3 rounded-xl focus:border-[#CCFF00] outline-none text-[10px] font-mono italic"
-                    />
+                    {newProduct.image && (
+                      <button 
+                        type="button"
+                        onClick={() => setNewProduct({...newProduct, image: ""})}
+                        className="text-[9px] font-black text-red-500 uppercase tracking-widest hover:underline text-left w-fit"
+                      >
+                        [ XÓA ẢNH HIỆN TẠI ]
+                      </button>
+                    )}
                   </div>
-                  <p className="text-[8px] text-zinc-600 mt-2 italic px-1">* Dán link ảnh từ Unsplash hoặc link bất kỳ để hiển thị</p>
                 </div>
                 <div>
                   <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline text-zinc-400">Tên sản phẩm</label>
@@ -9284,14 +9512,14 @@ export default function App() {
                        <p className="text-xs font-medium text-zinc-400 italic">Chào bạn! Tôi có thể giúp gì cho bạn hôm nay?</p>
                        <div className="grid grid-cols-1 gap-2 w-full mt-4">
                           {[
-                            "Gói tập rẻ nhất là gói nào?",
-                            "Lịch tập GYM cho người mới?",
+                            t('workoutPrompt'),
+                            t('packagePrompt'),
                             "Chế độ ăn giảm cân hiệu quả?",
                           ].map((suggest, i) => (
                             <button
                               key={i}
                               onClick={() => {
-                                setChatInput(suggest);
+                                handleSendMessage(undefined, suggest);
                               }}
                               className="px-4 py-3 bg-white/5 border border-white/5 rounded-xl text-[10px] font-bold text-zinc-500 hover:bg-[#CCFF00]/10 hover:text-[#CCFF00] hover:border-[#CCFF00]/20 transition-all text-left"
                             >

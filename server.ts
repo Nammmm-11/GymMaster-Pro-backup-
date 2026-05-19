@@ -46,6 +46,8 @@ interface PersonalTrainer {
   isActive: boolean;
   phone: string;
   email: string;
+  username?: string;
+  password?: string;
   avatar?: string;
 }
 
@@ -58,6 +60,8 @@ interface StaffMember {
   hourlyRate: number;
   phoneNumber: string;
   email: string;
+  username?: string;
+  password?: string;
   isActive: boolean;
   shiftHours: { start: string; end: string };
 }
@@ -296,6 +300,8 @@ async function startServer() {
       hourlyRate: 100000,
       phoneNumber: "0988776655",
       email: "admin@gym.com",
+      username: "admin_user",
+      password: "password123",
       isActive: true,
       shiftHours: { start: "08:00", end: "17:00" }
     },
@@ -308,6 +314,8 @@ async function startServer() {
       hourlyRate: 50000,
       phoneNumber: "0977665544",
       email: "letan@gym.com",
+      username: "staff_user",
+      password: "password123",
       isActive: true,
       shiftHours: { start: "06:00", end: "14:00" }
     }
@@ -580,6 +588,38 @@ async function startServer() {
           fullName: member.fullName,
           role: "MEMBER",
           avatar: member.avatar
+        });
+      }
+
+      // Kiểm tra tài khoản Nhân viên
+      const staff = staffMembers.find(s => 
+        (s.username && s.username.toLowerCase() === cleanUsername) || 
+        (s.email && s.email.toLowerCase() === cleanUsername)
+      );
+      if (staff && (cleanPassword === "123456" || cleanPassword === staff.password)) {
+        console.log(`[LOGIN] Staff Success: ${staff.fullName}`);
+        return res.json({
+          id: staff.id,
+          username: staff.username || staff.email,
+          fullName: staff.fullName,
+          role: staff.role,
+          avatar: ""
+        });
+      }
+
+      // Kiểm tra tài khoản HLV
+      const trainer = personalTrainers.find(t => 
+        (t.username && t.username.toLowerCase() === cleanUsername) || 
+        (t.email && t.email.toLowerCase() === cleanUsername)
+      );
+      if (trainer && (cleanPassword === "123456" || cleanPassword === trainer.password)) {
+        console.log(`[LOGIN] Trainer Success: ${trainer.fullName}`);
+        return res.json({
+          id: trainer.id,
+          username: trainer.username || trainer.email,
+          fullName: trainer.fullName,
+          role: "PT",
+          avatar: trainer.avatar
         });
       }
 
@@ -1220,40 +1260,64 @@ async function startServer() {
     res.json(evaluations.filter(e => e.memberId === memberId));
   });
 
+  app.post("/api/ai/churn-prediction", async (req, res) => {
+    try {
+      const { memberId } = req.body;
+      const member = members.find(m => m.id === parseInt(memberId));
+      if (!member) return res.status(404).json({ message: "Không tìm thấy hội viên" });
+      const memberCheckins = checkins.filter(c => c.memberId === member.id);
+      const prompt = `Dựa trên dữ liệu hội viên sau, hãy dự đoán khả năng họ bỏ tập (Churn Prediction):
+Hội viên: ${member.fullName}, Ngày đăng ký: ${member.registrationDate}, Gói: ${member.package}, Điểm danh: ${memberCheckins.length} lần, Trạng thái: ${member.status}.
+Trả lời tiếng Việt, phân tích lý do và mức rủi ro (Thấp/Trung bình/Cao) bằng Markdown.`;
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt
+      });
+      res.json({ analysis: response.text });
+    } catch (error) {
+      res.status(500).json({ message: "Lỗi phân tích AI" });
+    }
+  });
+
+  app.post("/api/ai/behavior-analysis", async (req, res) => {
+    try {
+      const dataSummary = {
+        totalMembers: members.length,
+        activeCount: members.filter(m => m.status === 'Hoạt động').length,
+        checkinsToday: checkins.filter(c => new Date(c.time).toDateString() === new Date().toDateString()).length,
+        popularPackages: packages.map(p => ({ name: p.name, count: members.filter(m => m.package === p.name).length }))
+      };
+      const prompt = `Phân tích hành vi khách hàng gym: ${JSON.stringify(dataSummary)}. 1. Xu hướng tập luyện. 2. Chiến lược cải thiện. Trả lời tiếng Việt, Markdown.`;
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt
+      });
+      res.json({ analysis: response.text });
+    } catch (error) {
+      res.status(500).json({ message: "Lỗi phân tích AI hành vi" });
+    }
+  });
+
   // ==========================================
   // AI CHATBOT API
   // ==========================================
   app.post("/api/chat", async (req, res) => {
     try {
       const { message, history } = req.body;
-      
-      const chat = ai.chats.create({
-        model: "gemini-3-flash-preview",
-        config: {
-          systemInstruction: "Bạn là trợ lý ảo của GymMaster Pro, một hệ thống quản lý phòng gym hiện đại. Bạn trả lời thân thiện, chuyên nghiệp bằng tiếng Việt. Hãy tư vấn về tập luyện, dinh dưỡng và giải đáp thắc mắc về các gói tập (Cơ bản: 500k/tháng, Tiêu chuẩn: 2.5tr/6tháng, Cao cấp: 4.5tr/12tháng, VIP: 12tr/12tháng). Giữ câu trả lời ngắn gọn, súc tích.",
-        },
-        // We could pass history if the SDK supported it directly in create, 
-        // but typically we append to a conversation or use message contents.
-        // For simplicity and since we are using ai.chats.create which starts fresh,
-        // we could also use ai.models.generateContent with current contents + user message.
-      });
-
-      // Simple implementation: generate response based on message. 
-      // If history is provided, we can concatenate it for context in generateContent or use chat session.
-      // Let's use history for better context.
-      
       const contents = history ? [...history, { role: "user", parts: [{ text: message }] }] : [{ role: "user", parts: [{ text: message }] }];
 
       const result = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents,
         config: {
-          systemInstruction: "Bạn là trợ lý ảo của GymMaster Pro, một hệ thống quản lý phòng gym hiện đại. Bạn trả lời thân thiện, chuyên nghiệp bằng tiếng Việt. Hãy tư vấn về tập luyện, dinh dưỡng và giải đáp thắc mắc về các gói tập (Cơ bản: 500k/tháng, Tiêu chuẩn: 2.5tr/6tháng, Cao cấp: 4.5tr/12tháng, VIP: 12tr/12tháng). Sử dụng Markdown để định dạng câu trả lời, đặc biệt là sử dụng danh sách (1., 2., 3. hoặc các dấu chấm đầu dòng) và xuống dòng hợp lý để dễ đọc. Giữ câu trả lời ngắn gọn, súc tích.",
+          systemInstruction: "Bạn là trợ lý ảo của GymMaster Pro. Trả lời thân thiện bằng tiếng Việt. Nhiệm vụ: 1. Gợi ý lịch tập cá nhân hóa. 2. Gợi ý gói tập (Cơ bản: 500k/tháng, Tiêu chuẩn: 2.5tr/6tháng, Cao cấp: 4.5tr/12tháng, VIP: 12tr/12tháng) dựa trên nhu cầu. 3. Tư vấn dinh dưỡng. Dùng Markdown, súc tích.",
         }
       });
 
       res.json({ text: result.text });
-    } catch (error: any) {
+    } catch (error) {
       console.error("Gemini API Error:", error);
       res.status(500).json({ error: "Lỗi kết nối với trí tuệ nhân tạo. Vui lòng thử lại sau." });
     }

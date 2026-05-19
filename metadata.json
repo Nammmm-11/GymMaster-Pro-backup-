@@ -1,6 +1,6 @@
 {
   "name": "Remix: GymMaster Pro (backup)",
-  "description": "Hệ thống quản lý phòng gym chuyên nghiệp: Hội viên, Gói tập, Lịch trình và Thanh toán.",
+  "description": "Hệ thống quản lý phòng gym chuyên nghiệp với AI: Dự đoán bỏ tập, Phân tích hành vi, Tư vấn lịch tập & dinh dưỡng tự động.",
   "requestFramePermissions": [
     "camera"
   ],
