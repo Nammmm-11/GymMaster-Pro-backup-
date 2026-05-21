@@ -61,6 +61,7 @@ import {
   Star,
   Trophy,
   Dumbbell,
+  Lock,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -1372,6 +1373,14 @@ export default function App() {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (activeTab === "maintenance") {
+      setFacilitiesSubTab("maintenance");
+    } else if (activeTab === "facilities") {
+      setFacilitiesSubTab("assets");
+    }
+  }, [activeTab]);
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [regForm, setRegForm] = useState({ fullName: "", email: "", phone: "", password: "" });
@@ -1399,6 +1408,8 @@ export default function App() {
   const [memberHistory, setMemberHistory] = useState<Checkin[]>([]);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [renewingMember, setRenewingMember] = useState<Member | null>(null);
+  const [isRenewSelectModalOpen, setIsRenewSelectModalOpen] = useState(false);
   const [trainers, setTrainers] = useState<PT[]>([]);
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
   const [attendance, setAttendance] = useState<AttendanceLog[]>([]);
@@ -1432,12 +1443,19 @@ export default function App() {
   const [isPTAssignModalOpen, setIsPTAssignModalOpen] = useState(false);
   const [isPTSessionModalOpen, setIsPTSessionModalOpen] = useState(false);
   const [isPayrollModalOpen, setIsPayrollModalOpen] = useState(false);
+  const [editingPayrollId, setEditingPayrollId] = useState<number | null>(null);
+  const [editBasePay, setEditBasePay] = useState<number>(0);
+  const [editOtPay, setEditOtPay] = useState<number>(0);
+  const [editPtBonus, setEditPtBonus] = useState<number>(0);
+  const [editCommission, setEditCommission] = useState<number>(0);
   const [isEquipmentModalOpen, setIsEquipmentModalOpen] = useState(false);
   const [isMaintenanceModalOpen, setIsMaintenanceModalOpen] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState<Equipment | null>(null);
   const [editingMaintenance, setEditingMaintenance] = useState<MaintenanceTask | null>(null);
   const [equipments, setEquipments] = useState<Equipment[]>([]);
   const [maintenanceTasks, setMaintenanceTasks] = useState<MaintenanceTask[]>([]);
+  const [equipmentSearch, setEquipmentSearch] = useState("");
+  const [facilitiesSubTab, setFacilitiesSubTab] = useState<"assets" | "maintenance">("assets");
   const [newStaff, setNewStaff] = useState<Partial<StaffMember>>({
     fullName: "",
     role: "STAFF",
@@ -1533,6 +1551,8 @@ export default function App() {
   const [isForgotMode, setIsForgotMode] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showStaffPassword, setShowStaffPassword] = useState(false);
+  const [showPTPassword, setShowPTPassword] = useState(false);
   const [registerForm, setRegisterForm] = useState({ fullName: "", email: "", phone: "", password: "" });
   const [loginError, setLoginError] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -1881,9 +1901,15 @@ export default function App() {
 
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
-    setIsLoggingIn(true);
     setLoginError("");
 
+    if (!registerForm.email.toLowerCase().endsWith("@gmail.com")) {
+      setLoginError("Đăng ký hội viên bắt buộc sử dụng email đuôi @gmail.com");
+      addNotification("Đăng ký hội viên bắt buộc sử dụng email đuôi @gmail.com", "error");
+      return;
+    }
+
+    setIsLoggingIn(true);
     try {
       const res = await fetch("/api/register", {
         method: "POST",
@@ -2040,6 +2066,33 @@ export default function App() {
 
       if (res.ok) {
         addNotification(`Gia hạn thành công hội viên ${member.fullName}!`);
+        fetchData();
+      } else {
+        const error = await res.json();
+        addNotification(error.message || "Gia hạn thất bại", "error");
+      }
+    } catch (err) {
+      addNotification("Lỗi kết nối máy chủ", "error");
+    }
+  };
+
+  const handleMemberRenewWithPackage = async (member: Member, pkgName: string) => {
+    try {
+      const res = await fetch("/api/members/renew", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          memberId: member.id,
+          packageName: pkgName,
+          paymentMethod: "Tiền mặt",
+          createdBy: user?.username || 'Hệ thống'
+        }),
+      });
+
+      if (res.ok) {
+        addNotification(`Gia hạn thành công gói tập [${pkgName}] cho hội viên ${member.fullName}!`);
+        setIsRenewSelectModalOpen(false);
+        setRenewingMember(null);
         fetchData();
       } else {
         const error = await res.json();
@@ -2347,10 +2400,14 @@ export default function App() {
   const handleAssignPT = async (e: FormEvent) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...newPTAssignment,
+        sessionsLeft: newPTAssignment.totalSessions
+      };
       const res = await fetch("/api/pt-assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newPTAssignment),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         addNotification(t('success'));
@@ -2503,6 +2560,31 @@ export default function App() {
       if (res.ok) {
         addNotification(t('success'));
         fetchData();
+      }
+    } catch (error) {
+      addNotification(t('systemError'), "error");
+    }
+  };
+
+  const handleUpdatePayroll = async (id: number) => {
+    try {
+      const res = await fetch(`/api/payroll/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          basePay: editBasePay,
+          otPay: editOtPay,
+          ptBonus: editPtBonus,
+          commission: editCommission
+        }),
+      });
+      if (res.ok) {
+        addNotification(t('success'));
+        setEditingPayrollId(null);
+        fetchData();
+      } else {
+        const err = await res.json();
+        addNotification(err.message || "Thao tác thất bại", "error");
       }
     } catch (error) {
       addNotification(t('systemError'), "error");
@@ -3073,7 +3155,7 @@ export default function App() {
                 <input
                   required
                   type="email"
-                  placeholder="EMAIL@GYM.COM"
+                  placeholder="EMAIL@DOMAIN.COM"
                   value={forgotEmail}
                   onChange={(e) => setForgotEmail(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-sm font-black uppercase tracking-tight"
@@ -3098,17 +3180,17 @@ export default function App() {
                 </div>
                 <div className="space-y-2">
                   <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest italic underline">
-                    {t('email')}
+                    {t('email')} (Đuôi @gmail.com)
                   </label>
                   <input
                     required
                     type="email"
-                    placeholder="EMAIL"
+                    placeholder="example@gmail.com"
                     value={registerForm.email}
                     onChange={(e) =>
                       setRegisterForm({ ...registerForm, email: e.target.value })
                     }
-                    className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-sm font-black uppercase tracking-tight"
+                    className="w-full bg-white/5 border border-white/10 px-6 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-sm font-black text-[#CCFF00] tracking-tight"
                   />
                 </div>
                 <div className="space-y-2">
@@ -3231,13 +3313,21 @@ export default function App() {
               {t('defaultAccounts')}
             </p>
             <div className="space-y-3 text-xs font-black font-mono text-zinc-400">
-              <div className="flex justify-between border-b border-white/5 pb-3">
+              <div className="flex justify-between border-b border-white/5 pb-2.5">
                 <span>{t('adminLabel')}:</span>
-                <span className="text-[#CCFF00]">admin / 123456</span>
+                <span className="text-[#CCFF00]">admin@fit.com / 123456</span>
               </div>
-              <div className="flex justify-between border-b border-white/5 pb-3">
+              <div className="flex justify-between border-b border-white/5 pb-2.5">
                 <span>{t('receptionistLabel')}:</span>
-                <span className="text-[#CCFF00]">staff / 123456</span>
+                <span className="text-[#CCFF00]">staff@fit.com / 123456</span>
+              </div>
+              <div className="flex justify-between border-b border-white/5 pb-2.5">
+                <span>HLV / PT:</span>
+                <span className="text-[#CCFF00]">pt@fit.com / 123456</span>
+              </div>
+              <div className="flex justify-between pb-1">
+                <span>HỘI VIÊN:</span>
+                <span className="text-[#CCFF00]">member@gmail.com / 123456</span>
               </div>
             </div>
           </div>
@@ -3396,12 +3486,12 @@ export default function App() {
                 },
                 { 
                   id: "facilitiesMgmt", 
-                  label: t('facilities'), 
+                  label: "QUẢN LÝ CƠ SỞ", 
                   icon: Box, 
                   role: "ADMIN",
                   subItems: [
-                    { id: "facilities", label: t('assets'), icon: Box },
-                    { id: "maintenance", label: t('maintenance'), icon: Calendar },
+                    { id: "facilities", label: "Cơ sở vật chất", icon: Box },
+                    { id: "maintenance", label: "Lịch sửa chữa & Bảo trì", icon: Calendar },
                   ]
                 },
                 { id: "settings", label: t('settings'), icon: Settings, role: "STAFF" },
@@ -3495,7 +3585,13 @@ export default function App() {
                           <button
                             key={sub.id}
                             onClick={() => {
-                              if (sub.action) {
+                              if (sub.id === "facilities") {
+                                setActiveTab("facilities");
+                                setFacilitiesSubTab("assets");
+                              } else if (sub.id === "maintenance") {
+                                setActiveTab("facilities");
+                                setFacilitiesSubTab("maintenance");
+                              } else if (sub.action) {
                                 sub.action();
                               } else {
                                 setActiveTab(sub.id as any);
@@ -3621,12 +3717,12 @@ export default function App() {
                     },
                     { 
                       id: "facilitiesMgmt", 
-                      label: t('facilities'), 
+                      label: "QUẢN LÝ CƠ SỞ", 
                       icon: Box, 
                       role: "ADMIN",
                       subItems: [
-                        { id: "facilities", label: t('assets'), icon: Box },
-                        { id: "maintenance", label: t('maintenance'), icon: Calendar },
+                        { id: "facilities", label: "Cơ sở vật chất", icon: Box },
+                        { id: "maintenance", label: "Lịch sửa chữa & Bảo trì", icon: Calendar },
                       ]
                     },
                   ].filter((item) => {
@@ -3700,7 +3796,15 @@ export default function App() {
                               <button
                                 key={sub.id}
                                 onClick={() => {
-                                  if (sub.action) {
+                                  if (sub.id === "facilities") {
+                                    setActiveTab("facilities");
+                                    setFacilitiesSubTab("assets");
+                                    setIsSidebarOpen(false);
+                                  } else if (sub.id === "maintenance") {
+                                    setActiveTab("facilities");
+                                    setFacilitiesSubTab("maintenance");
+                                    setIsSidebarOpen(false);
+                                  } else if (sub.action) {
                                     sub.action();
                                     setIsSidebarOpen(false);
                                   } else {
@@ -4790,8 +4894,20 @@ export default function App() {
                             setIsEditModalOpen(true);
                           }}
                           className="px-4 py-2.5 bg-zinc-800 text-white rounded-2xl border border-white/10 active:bg-white/10 transition-colors active:scale-95 transition-all"
+                          title="Chỉnh sửa thông tin"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRenewingMember(member);
+                            setIsRenewSelectModalOpen(true);
+                          }}
+                          className="px-4 py-2.5 bg-[#CCFF00]/10 text-[#CCFF00] rounded-2xl border border-[#CCFF00]/20 active:bg-[#CCFF00] active:text-black transition-all active:scale-95 flex items-center justify-center shadow-lg"
+                          title="Gia hạn gói tập"
+                        >
+                          <Settings className="w-3.5 h-3.5 animate-spin-slow hover:rotate-90 transition-transform duration-300" />
                         </button>
                       </div>
                     </motion.div>
@@ -4884,48 +5000,47 @@ export default function App() {
                                   <Activity className="w-3.5 h-3.5" />
                                 </button>
                                 
-                                <div className="relative">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingMember(member);
+                                    setIsEditModalOpen(true);
+                                  }}
+                                  className="w-9 h-9 rounded-xl flex items-center justify-center bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 border border-white/5 transition-all"
+                                  title="Chỉnh sửa thông tin"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setRenewingMember(member);
+                                    setIsRenewSelectModalOpen(true);
+                                  }}
+                                  className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#CCFF00]/10 text-[#CCFF00] hover:bg-[#CCFF00] hover:text-black border border-[#CCFF00]/20 hover:border-[#CCFF00] transition-all group/gear"
+                                  title="Gia hạn gói tập"
+                                >
+                                  <Settings className="w-3.5 h-3.5 group-hover/gear:rotate-90 transition-transform duration-300" />
+                                </button>
+
+                                {user.role === "ADMIN" && (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setOpenActionMenuId(openActionMenuId === member.id ? null : member.id);
+                                      confirmAction(
+                                        t('confirmDeleteTitle'),
+                                        `${t('confirmDeleteMsg')} (${member.fullName})`,
+                                        () => handleDeleteMember(member.id),
+                                        "danger"
+                                      );
                                     }}
-                                    className="w-9 h-9 rounded-xl flex items-center justify-center bg-white/5 text-zinc-400 hover:text-[#CCFF00] hover:bg-white/10 border border-white/5 transition-all"
-                                    title={t('actions')}
+                                    className="w-9 h-9 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 hover:border-red-500 transition-all"
+                                    title={t('deleteData')}
                                   >
-                                    <Settings className={`w-3.5 h-3.5 transition-transform duration-300 ${openActionMenuId === member.id ? 'rotate-90 text-[#CCFF00]' : ''}`} />
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
-                                  <AnimatePresence>
-                                    {openActionMenuId === member.id && (
-                                      <>
-                                        <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(null); }} />
-                                        <motion.div
-                                          initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                                          exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                                          className="absolute right-0 mt-2 w-48 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl z-[60] overflow-hidden"
-                                        >
-                                          <div className="p-1.5 flex flex-col gap-1">
-                                            <button onClick={(e) => { e.stopPropagation(); setEditingMember(member); setIsEditModalOpen(true); setOpenActionMenuId(null); }} className="flex items-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:bg-white/10 hover:text-white transition-all text-left">
-                                              <Edit2 className="w-3.5 h-3.5" />
-                                              CHỈNH SỬA THÔNG TIN
-                                            </button>
-                                            <button onClick={(e) => { e.stopPropagation(); confirmAction("XÁC NHẬN GIA HẠN", `Gia hạn thêm gói ${member.package} cho ${member.fullName}?`, () => handleMemberRenew(member), "info"); setOpenActionMenuId(null); }} className="flex items-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-[#CCFF00] hover:bg-[#CCFF00]/10 transition-all text-left">
-                                              <Zap className="w-3.5 h-3.5" />
-                                              GIA HẠN GÓI TẬP
-                                            </button>
-                                            {user.role === "ADMIN" && (
-                                              <button onClick={(e) => { e.stopPropagation(); confirmAction(t('confirmDeleteTitle'), `${t('confirmDeleteMsg')} (${member.fullName})`, () => handleDeleteMember(member.id), "danger"); setOpenActionMenuId(null); }} className="flex items-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-500 hover:bg-red-500/10 transition-all text-left">
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                                {t('deleteData')}
-                                              </button>
-                                            )}
-                                          </div>
-                                        </motion.div>
-                                      </>
-                                    )}
-                                  </AnimatePresence>
-                                </div>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -4937,118 +5052,190 @@ export default function App() {
             </div>
           </div>
           ) : activeTab === "pt" ? (
-            <div className="space-y-6 pb-0 h-full flex flex-col overflow-hidden relative z-10 px-5 md:px-0">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 shrink-0">
-                {ptStats.map(stat => (
-                  <div key={stat.trainerId} className="bg-zinc-950 border border-white/10 p-6 rounded-[2.5rem] relative overflow-hidden group hover:border-[#CCFF00]/30 transition-all shadow-2xl">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="w-12 h-12 rounded-2xl bg-[#CCFF00]/10 flex items-center justify-center text-[#CCFF00]">
-                        <Users className="w-6 h-6" />
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs font-black text-zinc-500 uppercase tracking-widest">{t('activeClients')}</p>
-                        <p className="text-3xl font-black text-white">{stat.activeClients}</p>
-                      </div>
-                    </div>
-                    <h3 className="text-xl font-black italic uppercase text-[#CCFF00] mb-4 tracking-tight">{stat.fullName}</h3>
-                    <div className="space-y-3 mb-6">
-                      <div className="flex justify-between items-center text-xs font-mono uppercase italic border-b border-white/5 pb-2">
-                        <span className="text-zinc-600">{t('ptRevenue')}</span>
-                        <span className="text-white font-black">{stat.totalRevenue.toLocaleString()}đ</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs font-mono uppercase italic border-b border-white/5 pb-2">
-                        <span className="text-zinc-600">{t('ptCommission')}</span>
-                        <span className="text-[#CCFF00] font-black">{stat.commission.toLocaleString()}đ</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs font-mono uppercase italic">
-                        <span className="text-zinc-600">{t('sessionsRecorded')}</span>
-                        <span className="text-white font-black">{stat.sessionsTotal} {t('sessions')}</span>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => openPTAssignModal(stat.trainerId)}
-                      className="w-full py-3 bg-[#CCFF00]/10 text-[#CCFF00] border border-[#CCFF00]/20 rounded-2xl hover:bg-[#CCFF00] hover:text-black transition-all text-[9px] font-black uppercase tracking-widest"
-                    >
-                      GÁN HỘI VIÊN MỚI
-                    </button>
-                  </div>
-                ))}
-              </div>
+            <div className="space-y-6 pb-20 h-full flex flex-col overflow-hidden relative z-10 px-5 md:px-0">
+              {/* Responsive layout of unified, spacious, detailed PT profile cards */}
+              <div className="flex-1 overflow-y-auto pr-1 pb-10 custom-scrollbar">
+                {(() => {
+                  const filteredTrainers = trainers.filter(trainer => 
+                    trainer.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    trainer.phone.includes(searchTerm) ||
+                    (trainer.username && trainer.username.toLowerCase().includes(searchTerm.toLowerCase()))
+                  );
 
-              <div className="bg-zinc-900 border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl flex-1 flex flex-col">
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
-                  <table className="w-full text-left bg-zinc-950">
-                    <thead className="sticky top-0 bg-zinc-950 z-10">
-                      <tr className="text-sm font-black font-mono text-zinc-400 uppercase border-b border-white/5 bg-white/[0.01]">
-                        <th className="px-8 py-5 tracking-[0.2em]">{t('fullName')}</th>
-                        <th className="px-8 py-5 tracking-[0.2em]">TÀI KHOẢN</th>
-                        <th className="px-8 py-5 tracking-[0.2em]">MẬT KHẨU</th>
-                        <th className="px-8 py-5 tracking-[0.2em]">{t('expertise')}</th>
-                        <th className="px-8 py-5 tracking-[0.2em]">{t('ptLevel')}</th>
-                        <th className="px-8 py-5 tracking-[0.2em]">{t('ptCommission')}</th>
-                        <th className="px-8 py-5 text-right">{t('actions')}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {trainers.map(trainer => (
-                        <tr key={trainer.id} className="hover:bg-white/[0.02] transition-all">
-                          <td className="px-8 py-5 whitespace-nowrap">
-                            <div className="font-black text-white uppercase italic tracking-tight text-base">{trainer.fullName}</div>
-                            <div className="text-xs font-black font-mono text-zinc-600">{trainer.phone}</div>
-                          </td>
-                          <td className="px-8 py-5 text-center">
-                            <span className="text-[10px] font-mono text-zinc-400">{trainer.username || 'N/A'}</span>
-                          </td>
-                          <td className="px-8 py-5 text-center">
-                            <span className="text-[10px] font-mono text-zinc-400">
-                              {visiblePasswords[`p-${trainer.id}`] ? (trainer.password || '123456') : '••••••••'}
-                            </span>
-                          </td>
-                          <td className="px-8 py-5">
-                            <div className="flex flex-wrap gap-1">
-                              {trainer.expertise.map((exp, i) => (
-                                <span key={i} className="text-xs font-black bg-zinc-900 border border-white/10 text-zinc-400 px-2 py-1 rounded-md uppercase italic">{exp}</span>
-                              ))}
+                  if (filteredTrainers.length === 0) {
+                    return (
+                      <div className="flex flex-col items-center justify-center p-16 text-center bg-zinc-950 border border-white/5 rounded-[2.5rem] my-10 shadow-2xl">
+                        <Users className="w-16 h-16 text-zinc-700 mb-4 animate-pulse" />
+                        <p className="text-zinc-500 font-bold uppercase tracking-wider text-base">Không tìm thấy huấn luyện viên tương thích</p>
+                        <p className="text-zinc-600 font-medium text-xs mt-2">Vui lòng thử tìm kiếm bằng tên hoặc số điện thoại khác.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 p-1">
+                      {filteredTrainers.map(trainer => {
+                        const stat = ptStats.find(s => s.trainerId === trainer.id) || {
+                          trainerId: trainer.id,
+                          fullName: trainer.fullName,
+                          activeClients: 0,
+                          totalRevenue: 0,
+                          commission: 0,
+                          sessionsTotal: 0
+                        };
+                        const isPassVisible = visiblePasswords[`p-${trainer.id}`];
+
+                        // Calculate detailed sessions counters dynamically across all contracts/assignments
+                        const trainerAssignments = ptAssignments.filter(a => a.trainerId === trainer.id);
+                        const totalRegisteredSessions = trainerAssignments.reduce((sum, a) => sum + (a.totalSessions || 0), 0);
+                        const totalSessionsLeft = trainerAssignments.reduce((sum, a) => sum + (a.sessionsLeft || 0), 0);
+                        const totalSessionsTaught = totalRegisteredSessions - totalSessionsLeft;
+
+                        return (
+                          <div 
+                            key={trainer.id} 
+                            className="bg-zinc-950 border border-white/10 hover:border-[#CCFF00]/40 p-8 rounded-[2.5rem] relative overflow-hidden group hover:shadow-[0_20px_50px_rgba(0,0,0,0.6)] hover:shadow-[#CCFF00]/5 transition-all duration-300 flex flex-col justify-between"
+                          >
+                            {/* Ambient background accent light */}
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-[#CCFF00]/[0.01] rounded-full blur-3xl group-hover:bg-[#CCFF00]/[0.04] transition-all duration-500 pointer-events-none" />
+                            
+                            <div className="space-y-6">
+                              {/* Header Row */}
+                              <div className="flex justify-between items-start gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <span className={`inline-block text-[9px] font-black px-2.5 py-1 rounded-md uppercase tracking-wider mb-2.5 ${
+                                    trainer.level === 'Master' 
+                                      ? 'bg-[#CCFF00] text-black font-extrabold' 
+                                      : 'bg-white/5 text-zinc-400 border border-white/10'
+                                  }`}>
+                                    {trainer.level} PT
+                                  </span>
+                                  <h3 className="text-2xl font-black italic uppercase text-white group-hover:text-[#CCFF00] tracking-tight leading-7 transition-colors duration-300 truncate" title={trainer.fullName}>
+                                    {trainer.fullName}
+                                  </h3>
+                                  <p className="text-xs font-mono font-bold text-zinc-500 mt-1 uppercase tracking-wider">{trainer.phone}</p>
+                                </div>
+                                
+                                {/* Quick actions panel */}
+                                <div className="shrink-0 flex gap-1 bg-zinc-900/60 p-1.5 rounded-2xl border border-white/5">
+                                  <button 
+                                    onClick={() => handleViewPTDetails(trainer)}
+                                    title="Xem chi tiết"
+                                    className="p-2.5 text-zinc-400 hover:text-blue-400 rounded-xl hover:bg-zinc-850 transition-all active:scale-95"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleEditPT(trainer)}
+                                    title="Chỉnh sửa thông tin"
+                                    className="p-2.5 text-zinc-400 hover:text-[#CCFF00] rounded-xl hover:bg-zinc-850 transition-all active:scale-95"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeletePT(trainer.id)}
+                                    title="Xóa huấn luyện viên"
+                                    className="p-2.5 text-zinc-400 hover:text-red-500 rounded-xl hover:bg-zinc-850 transition-all active:scale-95"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Account Access Details */}
+                              <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 shadow-inner">
+                                <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                  <Lock className="w-3.5 h-3.5 text-[#CCFF00]" /> TÀI KHOẢN ĐĂNG NHẬP
+                                </p>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <span className="text-[9px] text-zinc-500 block uppercase tracking-wider mb-1.5">Tên đăng nhập</span>
+                                    <span className="text-xs font-mono font-bold text-zinc-300 bg-zinc-900/80 px-3 py-1.5 rounded-lg border border-white/5 block truncate">
+                                      {trainer.username || 'Chưa thiết lập'}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <div className="flex justify-between items-center mb-1.5">
+                                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider">Mật khẩu</span>
+                                      <button 
+                                        onClick={() => setVisiblePasswords(prev => ({...prev, [`p-${trainer.id}`]: !prev[`p-${trainer.id}`]}))}
+                                        className="text-[9px] font-black text-[#CCFF00] uppercase hover:underline"
+                                      >
+                                        {isPassVisible ? "Ẩn" : "Hiện"}
+                                      </button>
+                                    </div>
+                                    <span className="text-xs font-mono font-bold text-zinc-300 bg-zinc-900/80 px-3 py-1.5 rounded-lg border border-white/5 block overflow-hidden text-ellipsis whitespace-nowrap">
+                                      {isPassVisible ? (trainer.password || '123456') : '••••••••'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Fields of expertise */}
+                              <div>
+                                <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest mb-2.5">LĨNH VỰC CHUYÊN MÔN</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {trainer.expertise && trainer.expertise.length > 0 ? (
+                                    trainer.expertise.map((exp, i) => (
+                                      <span key={i} className="text-[10px] font-black bg-zinc-900/80 border border-white/5 text-zinc-400 px-3 py-1.5 rounded-lg uppercase italic">
+                                        {exp}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="text-[10px] text-zinc-600 uppercase italic">Chưa xác định</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Realtime Stats / Metrics summary */}
+                              <div className="space-y-3.5 border-t border-b border-white/5 py-5 text-xs font-mono uppercase italic">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-zinc-500 tracking-wider">HỘI VIÊN ĐANG THEO</span>
+                                  <span className="text-white font-black text-sm">{stat.activeClients}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-zinc-500 tracking-wider font-semibold">DOANH THU PT</span>
+                                  <span className="text-white font-black text-sm">{stat.totalRevenue.toLocaleString()}đ</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-[#CCFF00]/5 p-2 rounded-lg border border-[#CCFF00]/10">
+                                  <span className="text-[#CCFF00] tracking-wider">CÁC CHỈ SỐ BUỔI TẬP:</span>
+                                </div>
+                                <div className="flex justify-between items-center pl-2">
+                                  <span className="text-zinc-500 tracking-wider">TỔNG BUỔI ĐĂNG KÝ (HỢP ĐỒNG)</span>
+                                  <span className="text-white font-black text-sm">{totalRegisteredSessions} buổi</span>
+                                </div>
+                                <div className="flex justify-between items-center pl-2">
+                                  <span className="text-zinc-400 tracking-wider">SỐ BUỔI ĐẠY THỰC TẾ</span>
+                                  <span className="text-[#CCFF00] font-black text-sm">{stat.sessionsTotal} buổi</span>
+                                </div>
+                                <div className="flex justify-between items-center pl-2">
+                                  <span className="text-zinc-500 tracking-wider">ĐÃ TRỪ BUỔI TRÊN HỆ THỐNG</span>
+                                  <span className="text-white font-black text-sm">{totalSessionsTaught} buổi</span>
+                                </div>
+                                <div className="flex justify-between items-center pl-2">
+                                  <span className="text-zinc-500 tracking-wider">CHƯA DẠY (CÒN LẠI)</span>
+                                  <span className="text-white font-black text-sm">{totalSessionsLeft} buổi</span>
+                                </div>
+                                <div className="flex justify-between items-center border-t border-white/5 pt-3.5 mt-3.5">
+                                  <span className="text-zinc-500 tracking-wider">HOA HỒNG PT ({(trainer.commissionRate * 100).toFixed(0)}%)</span>
+                                  <span className="text-[#CCFF00] font-black text-sm">{stat.commission.toLocaleString()}đ</span>
+                                </div>
+                              </div>
                             </div>
-                          </td>
-                          <td className="px-8 py-5">
-                            <span className={`text-xs font-black px-2.5 py-1.5 rounded-md uppercase ${trainer.level === 'Master' ? 'bg-[#CCFF00] text-black' : 'bg-white/5 text-zinc-400 border border-white/10'}`}>{trainer.level}</span>
-                          </td>
-                          <td className="px-8 py-5 text-sm font-mono text-[#CCFF00] font-black">{(trainer.commissionRate * 100).toFixed(0)}%</td>
-                          <td className="px-8 py-5 text-right">
-                            <div className="flex justify-end gap-2">
-                              <button 
-                                onClick={() => setVisiblePasswords(prev => ({...prev, [`p-${trainer.id}`]: !prev[`p-${trainer.id}`]}))}
-                                className="p-2.5 bg-zinc-900 text-zinc-500 hover:text-[#CCFF00] rounded-xl border border-white/10 transition-all hover:bg-zinc-800"
-                              >
-                                {visiblePasswords[`p-${trainer.id}`] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                              </button>
-                              <button 
-                                onClick={() => handleViewPTDetails(trainer)}
-                                title="Xem chi tiết"
-                                className="p-2.5 bg-zinc-900 text-zinc-500 hover:text-blue-400 rounded-xl border border-white/10 transition-all hover:bg-zinc-800"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => handleEditPT(trainer)}
-                                className="p-2.5 bg-zinc-900 text-zinc-500 hover:text-[#CCFF00] rounded-xl border border-white/10 transition-all hover:bg-zinc-800"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => handleDeletePT(trainer.id)}
-                                className="p-2.5 bg-zinc-900 text-zinc-500 hover:text-red-500 rounded-xl border border-white/10 transition-all hover:bg-zinc-800"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+
+                            {/* Assign Member CTA Button */}
+                            <button
+                              onClick={() => openPTAssignModal(trainer.id)}
+                              className="w-full py-4 bg-[#CCFF00]/10 text-[#CCFF00] border border-[#CCFF00]/20 hover:bg-[#CCFF00] hover:text-black transition-all hover:scale-[1.01] text-xs font-black uppercase tracking-widest active:scale-[0.98] duration-200 rounded-2xl flex items-center justify-center gap-2 mt-6 shadow-md"
+                            >
+                              <Users className="w-4 h-4" /> GÁN HỘI VIÊN MỚI
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           ) : activeTab === "staff" ? (
@@ -5170,13 +5357,10 @@ export default function App() {
               </div>
             </div>
           ) : activeTab === "evaluations" ? (
-            <div className="space-y-12 pb-20 overflow-y-auto h-full custom-scrollbar px-4 md:px-0">
-               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  <div className="space-y-2">
-                    <h2 className="text-4xl md:text-5xl font-black italic uppercase text-white tracking-tighter leading-none">ĐÁNH GIÁ DỊCH VỤ</h2>
-                  </div>
-                  
-                  {/* Rating Filter */}
+            <div className="space-y-8 pb-20 overflow-y-auto h-full custom-scrollbar px-4 md:px-0">
+               {/* Rating Filter */}
+               <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-[10px] font-black font-mono text-zinc-500 uppercase tracking-widest italic">LỌC SỐ SAO:</span>
                   <div className="flex flex-wrap items-center gap-2 bg-white/5 p-2 rounded-2xl border border-white/5">
                     <button 
                       onClick={() => setRatingFilter(null)}
@@ -5195,7 +5379,7 @@ export default function App() {
                         }`}
                       >
                         <span className="text-[10px] font-black">{stars}</span>
-                        <Star className={`w-3 h-3 ${ratingFilter === stars ? 'fill-black' : 'fill-zinc-500'}`} />
+                        <Star className={`w-3 h-3 ${ratingFilter === stars ? 'fill-black' : 'fill-zinc-400'}`} />
                       </button>
                     ))}
                   </div>
@@ -6173,105 +6357,7 @@ export default function App() {
                             <td colSpan={5} className="py-32 text-center">
                                 <div className="flex flex-col items-center opacity-20">
                                   <Box className="w-12 h-12 mb-4" />
-                                  <p className="text-[10px] font-mono uppercase tracking-[0.5em]">KHÔNG CÓ HỘI VIÊN SẮP HẾT HẠN</p>
-                                </div>
-                            </td>
-                          </tr>
-                        ) : (
-                          members.filter(m => {
-                            const days = (new Date(m.expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24);
-                            return days > 0 && days <= 7;
-                          }).map(m => {
-                            const days = Math.ceil((new Date(m.expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                            return (
-                                <tr key={m.id} className="hover:bg-white/[0.01] transition-colors group">
-                                  <td className="px-8 py-6">
-                                      <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500 text-[10px] font-black ring-1 ring-amber-500/20 italic">{m.fullName.charAt(0)}</div>
-                                        <span className="text-xs font-black uppercase italic text-white">{m.fullName}</span>
-                                      </div>
-                                  </td>
-                                  <td className="px-8 py-6 italic text-[11px] text-zinc-500">{m.package}</td>
-                                  <td className="px-8 py-6 font-mono text-[11px] text-zinc-400">{m.expiryDate}</td>
-                                  <td className="px-8 py-6">
-                                      <span className="bg-amber-500/10 text-amber-500 px-3 py-1 rounded-full text-[10px] font-black italic uppercase tracking-wider">{days} NGÀY</span>
-                                  </td>
-                                  <td className="px-8 py-6">
-                                      <div className="flex justify-center">
-                                        <button 
-                                            onClick={() => { setSelectedMember(m); setIsProfileModalOpen(true); }}
-                                            className="px-4 py-2 bg-[#CCFF00] text-black rounded-lg text-[9px] font-black uppercase tracking-widest hover:scale-105 transition-transform"
-                                        >
-                                            GIA HẠN NGAY
-                                        </button>
-                                      </div>
-                                  </td>
-                                </tr>
-                            );
-                          })
-                        )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </motion.div>
-          ) : activeTab === "invoice-expired" ? (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="space-y-6 pb-0 h-full flex flex-col overflow-hidden px-0"
-            >
-              <div className="bg-zinc-950 border border-white/5 rounded-[2.5rem] shadow-2xl overflow-hidden flex-1 flex flex-col mx-4 md:mx-0">
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
-                  <table className="w-full text-left border-collapse min-w-[900px]">
-                    <thead className="sticky top-0 bg-zinc-950 z-10">
-                        <tr className="text-[10px] font-black font-mono text-zinc-500 uppercase tracking-widest border-b border-white/5 italic">
-                          <th className="px-8 py-6">HỘI VIÊN</th>
-                          <th className="px-8 py-6">GÓI CŨ</th>
-                          <th className="px-8 py-6">NGÀY HẾT HẠN</th>
-                          <th className="px-8 py-6 text-center">THAO TÁC</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/[0.02]">
-                        {members.filter(m => new Date(m.expiryDate) < new Date()).length === 0 ? (
-                          <tr>
-                            <td colSpan={4} className="py-32 text-center">
-                                <div className="flex flex-col items-center opacity-20">
-                                  <Box className="w-12 h-12 mb-4" />
-                                  <p className="text-[10px] font-mono uppercase tracking-[0.5em]">KHÔNG CÓ HỘI VIÊN HẾT HẠN</p>
-                                </div>
-                            </td>
-                          </tr>
-                        ) : (
-                          members.filter(m => new Date(m.expiryDate) < new Date()).map(m => (
-                            <tr key={m.id} className="hover:bg-white/[0.01] transition-colors group">
-                                <td className="px-8 py-6">
-                                  <div className="flex items-center gap-3">
-                                      <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500 text-[10px] font-black ring-1 ring-red-500/20 italic">{m.fullName.charAt(0)}</div>
-                                      <span className="text-xs font-black uppercase italic text-white">{m.fullName}</span>
-                                  </div>
-                                </td>
-                                <td className="px-8 py-6 italic text-[11px] text-zinc-500">{m.package}</td>
-                                <td className="px-8 py-6 font-mono text-[11px] text-red-500/70">{m.expiryDate}</td>
-                                <td className="px-8 py-6">
-                                  <div className="flex justify-center">
-                                      <button 
-                                        onClick={() => { setSelectedMember(m); setIsProfileModalOpen(true); }}
-                                        className="px-4 py-2 bg-zinc-800 text-[#CCFF00] border border-[#CCFF00]/30 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-[#CCFF00] hover:text-black transition-all"
-                                      >
-                                        LIÊN HỆ GIA HẠN
-                                      </button>
-                                  </div>
-                                </td>
-                            </tr>
-                          ))
-                        )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </motion.div>
-          ) : activeTab === "facilities" ? (
+                                  <p className="text-[10px] font-mono uppercas          ) : (activeTab === "facilities" || activeTab === "maintenance") ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -6279,94 +6365,183 @@ export default function App() {
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
                 <div>
-                  <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white leading-none">{t('assets')}</h2>
-                  <p className="text-zinc-500 text-[10px] font-mono mt-1 uppercase tracking-widest">{t('mgmtSystem')} // EQUIPMENT_INVENTORY</p>
+                  <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white leading-none">QUẢN LÝ CƠ SỞ VẬT CHẤT</h2>
+                  <p className="text-[#CCFF00] text-[10px] font-mono mt-2 uppercase tracking-widest leading-none">THIẾT BỊ PHÒNG TẬP VÀ KẾ HOẠCH BẢO TRÌ SỬA CHỮA CHI TIẾT</p>
                 </div>
-                <div className="flex items-center gap-3">
+                
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                   <div className="relative group flex-1 md:w-64">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-hover:text-[#CCFF00] transition-colors" />
                     <input
                       type="text"
-                      placeholder={t('searchQuick')}
+                      value={equipmentSearch}
+                      onChange={(e) => setEquipmentSearch(e.target.value)}
+                      placeholder="Tìm kiếm nhanh thiết bị..."
                       className="w-full bg-zinc-950 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-xs font-black uppercase tracking-widest focus:border-[#CCFF00] outline-none transition-all placeholder:text-zinc-800"
                     />
                   </div>
-                  <button 
-                    onClick={() => { setEditingEquipment(null); setIsEquipmentModalOpen(true); }}
-                    className="flex items-center gap-2 bg-[#CCFF00] text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-[0_10px_20px_rgba(204,255,0,0.1)] hover:scale-105 active:scale-95 transition-all"
-                  >
-                    <Plus className="w-4 h-4" />
-                    {t('addEquipment')}
-                  </button>
+                  
+                  {facilitiesSubTab === "assets" ? (
+                    <button 
+                      onClick={() => { setEditingEquipment(null); setIsEquipmentModalOpen(true); }}
+                      className="flex items-center justify-center gap-2 bg-[#CCFF00] text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-[0_10px_20px_rgba(204,255,0,0.1)] hover:scale-105 active:scale-95 transition-all outline-none border-none"
+                    >
+                      <Plus className="w-4 h-4" />
+                      THÊM THIẾT BỊ MỚI
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => { setEditingMaintenance(null); setIsMaintenanceModalOpen(true); }}
+                      className="flex items-center justify-center gap-2 bg-[#CCFF00] text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-[0_10px_20px_rgba(204,255,0,0.1)] hover:scale-105 active:scale-95 transition-all outline-none border-none"
+                    >
+                      <Plus className="w-4 h-4" />
+                      LÊN LỊCH SỬA CHỮA
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto custom-scrollbar pb-10">
-                {equipments.map((eq) => (
-                  <div key={eq.id} className="bg-zinc-950 border border-white/5 rounded-[2.5rem] p-8 hover:border-[#CCFF00]/20 transition-all group relative overflow-hidden">
-                    <div className="absolute -top-4 -right-4 w-24 h-24 bg-[#CCFF00]/5 blur-3xl rounded-full group-hover:bg-[#CCFF00]/10 transition-all" />
-                    
-                    <div className="flex justify-between items-start mb-6">
-                      <div className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
-                        eq.status === 'NORMAL' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                        eq.status === 'MAINTENANCE_REQUIRED' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
-                        eq.status === 'BROKEN' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                        'bg-[#CCFF00]/10 text-[#CCFF00] border-[#CCFF00]/20'
-                      }`}>
-                        {t(eq.status.toLowerCase().replace('_', ''))}
-                      </div>
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => { setEditingEquipment(eq); setIsEquipmentModalOpen(true); }}
-                          className="p-2 text-zinc-500 hover:text-[#CCFF00] transition-colors"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button className="p-2 text-zinc-500 hover:text-red-500 transition-colors">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="mb-6">
-                      <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest mb-1 italic">{eq.category}</p>
-                      <h4 className="text-xl font-black text-white uppercase italic tracking-tighter group-hover:text-[#CCFF00] transition-colors">{eq.name}</h4>
-                      <p className="text-[10px] font-mono text-zinc-500 mt-1 uppercase tracking-widest">UID: {eq.code}</p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 mb-8">
-                       <div className="p-4 bg-white/[0.02] rounded-2xl border border-white/5">
-                          <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1">{t('lastMaintenance')}</p>
-                          <p className="text-xs font-black text-white font-mono">{eq.lastMaintenance}</p>
-                       </div>
-                       <div className="p-4 bg-white/[0.02] rounded-2xl border border-white/5">
-                          <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1">{t('nextMaintenance')}</p>
-                          <p className={`text-xs font-black font-mono ${new Date(eq.nextMaintenance) < new Date() ? 'text-red-500' : 'text-[#CCFF00]'}`}>{eq.nextMaintenance}</p>
-                       </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-6 border-t border-white/5">
-                       <div className="flex flex-col">
-                          <p className="text-[9px] font-black text-zinc-600 uppercase tracking-widest mb-1 italic">{t('location')}</p>
-                          <p className="text-[11px] font-black text-zinc-300 uppercase italic leading-none">{eq.location}</p>
-                       </div>
-                       <div className="w-12 h-12 bg-white flex items-center justify-center rounded-xl overflow-hidden shadow-xl ring-4 ring-white/5 group-hover:scale-110 transition-transform">
-                          <div className="grid grid-cols-3 grid-rows-3 gap-0.5 p-1 w-full h-full opacity-80">
-                             {[...Array(9)].map((_, i) => (
-                               <div key={i} className={`rounded-sm ${Math.random() > 0.4 ? 'bg-black' : 'bg-transparent'}`} />
-                             ))}
-                          </div>
-                       </div>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex border-b border-white/5 gap-6 shrink-0 pt-2">
+                <button
+                  onClick={() => setFacilitiesSubTab('assets')}
+                  className={`pb-4 px-2 text-xs font-black uppercase tracking-widest relative transition-all ${
+                    facilitiesSubTab === 'assets' ? 'text-[#CCFF00]' : 'text-zinc-500 hover:text-white'
+                  }`}
+                >
+                  Danh sách thiết bị
+                  {facilitiesSubTab === 'assets' && (
+                    <motion.div layoutId="fac-sub-tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#CCFF00]" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setFacilitiesSubTab('maintenance')}
+                  className={`pb-4 px-2 text-xs font-black uppercase tracking-widest relative transition-all ${
+                    facilitiesSubTab === 'maintenance' ? 'text-[#CCFF00]' : 'text-zinc-500 hover:text-white'
+                  }`}
+                >
+                  Lịch sửa chữa & Bảo trì ({maintenanceTasks.length})
+                  {facilitiesSubTab === 'maintenance' && (
+                    <motion.div layoutId="fac-sub-tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#CCFF00]" />
+                  )}
+                </button>
               </div>
-            </motion.div>
-          ) : activeTab === "maintenance" ? (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="space-y-6 h-full flex flex-col overflow-hidden px-5 md:px-0"
+
+              {facilitiesSubTab === "assets" ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto custom-scrollbar pb-10 flex-1 min-h-0">
+                  {equipments.filter(eq => 
+                    eq.name.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+                    eq.code.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+                    eq.category.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+                    eq.location.toLowerCase().includes(equipmentSearch.toLowerCase())
+                  ).length === 0 ? (
+                    <div className="col-span-full py-20 text-center">
+                      <div className="flex flex-col items-center opacity-25">
+                        <Box className="w-12 h-12 mb-4" />
+                        <p className="text-[10px] font-mono uppercase tracking-widest">Không tìm thấy thiết bị phù hợp</p>
+                      </div>
+                    </div>
+                  ) : (
+                    equipments.filter(eq => 
+                      eq.name.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+                      eq.code.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+                      eq.category.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+                      eq.location.toLowerCase().includes(equipmentSearch.toLowerCase())
+                    ).map((eq) => {
+                      const statusText = eq.status === 'NORMAL' ?                         <tbody className="divide-y divide-white/[0.02]">
+                          {maintenanceTasks.filter(task => 
+                            task.equipmentName.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+                            task.performer.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+                            task.taskType.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+                            (task.notes && task.notes.toLowerCase().includes(equipmentSearch.toLowerCase()))
+                          ).length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="py-32 text-center">
+                                 <div className="flex flex-col items-center opacity-20">
+                                    <Calendar className="w-12 h-12 mb-4" />
+                                    <p className="text-[10px] font-mono uppercase tracking-[0.5em]">KHÔNG CÓ LỊCH SỬA CHỮA NÀO</p>
+                                 </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            maintenanceTasks.filter(task => 
+                              task.equipmentName.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+                              task.performer.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+                              task.taskType.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+                              (task.notes && task.notes.toLowerCase().includes(equipmentSearch.toLowerCase()))
+                            ).map((task) => {
+                              const priorityText = task.priority === 'HIGH' ? 'Cao / Khẩn cấp' :
+                                                   task.priority === 'MEDIUM' ? 'Trung bình' : 'Thấp';
+                              const priorityColor = task.priority === 'HIGH' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                                                    task.priority === 'MEDIUM' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
+                                                    'bg-zinc-500/10 text-zinc-500 border-zinc-500/20';
+
+                              const typeText = task.taskType === 'ROUTINE' ? 'Bảo trì định kỳ' :
+                                               task.taskType === 'REPAIR' ? 'Khắc phục hỏng hóc' : 'Kiểm định định kỳ';
+
+                              const statusText = task.status === 'COMPLETED' ? 'Đã hoàn thành' :
+                                                 task.status === 'IN_PROGRESS' ? 'Đang thực hiện' :
+                                                 task.status === 'PENDING' ? 'Mới lên lịch' : 'Đã hủy bỏ';
+
+                              return (
+                                <tr key={task.id} className="hover:bg-white/[0.01] transition-colors group">
+                                   <td className="px-8 py-6">
+                                      <div className="flex flex-col">
+                                        <span className="text-xs font-black uppercase italic text-white leading-none">{task.equipmentName}</span>
+                                        <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest mt-2 italic">{typeText}</span>
+                                      </div>
+                                   </td>
+                                   <td className="px-8 py-6 font-mono text-xs text-zinc-400">{task.scheduledDate}</td>
+                                   <td className="px-8 py-6 text-xs text-zinc-300 font-medium">{task.performer || "Chưa phân công"}</td>
+                                   <td className="px-8 py-6">
+                                      <div className={`inline-flex px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${priorityColor}`}>
+                                        {priorityText}
+                                      </div>
+                                   </td>
+                                   <td className="px-8 py-6">
+                                      <div className={`inline-flex items-center gap-2 text-[10px] font-black uppercase italic tracking-widest ${
+                                        task.status === 'COMPLETED' ? 'text-emerald-500' :
+                                        task.status === 'IN_PROGRESS' ? 'text-[#CCFF00]' :
+                                        task.status === 'PENDING' ? 'text-zinc-500' : 'text-red-500'
+                                      }`}>
+                                        <div className={`w-1.5 h-1.5 rounded-full ${
+                                           task.status === 'COMPLETED' ? 'bg-emerald-500' :
+                                           task.status === 'IN_PROGRESS' ? 'bg-[#CCFF00] animate-pulse' :
+                                           task.status === 'PENDING' ? 'bg-zinc-700' : 'bg-red-600'
+                                        }`} />
+                                        {statusText}
+                                      </div>
+                                   </td>
+                                   <td className="px-8 py-6 text-center">
+                                      <div className="flex justify-center gap-2">
+                                        <button 
+                                          onClick={() => { setEditingMaintenance(task); setIsMaintenanceModalOpen(true); }}
+                                          className="p-2 bg-white/5 rounded-lg text-zinc-400 hover:text-[#CCFF00] hover:bg-[#CCFF00]/10 transition-all border border-transparent hover:border-[#CCFF00]/20"
+                                        >
+                                          <Edit2 className="w-4 h-4" />
+                                        </button>
+                                        <button 
+                                          onClick={() => handleDeleteMaintenance(task.id)}
+                                          className="p-2 bg-white/5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-500/10 transition-all border border-transparent hover:border-[#CCFF00]/20"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                   </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                     </table>
+                   </div>
+                </div>
+              )}
+            </motion.div>ody>
+                     </table>
+                   </div>
+                </div>
+              )}
+            </motion.div>assName="space-y-6 h-full flex flex-col overflow-hidden px-5 md:px-0"
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
                 <div>
@@ -6851,18 +7026,18 @@ export default function App() {
 
                   <div className="col-span-full grid grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline">
-                        {t('email')}
+                      <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline text-[#CCFF00]">
+                        {t('email')} (Gmail @gmail.com)
                       </label>
                       <input
                         required
                         type="email"
-                        placeholder="example@gym.com"
+                        placeholder="example@gmail.com"
                         value={newMember.email}
                         onChange={(e) =>
                           setNewMember({ ...newMember, email: e.target.value })
                         }
-                        className="w-full bg-white/5 border border-white/10 px-4 py-3 rounded-xl focus:border-[#CCFF00] outline-none text-xs font-mono"
+                        className="w-full bg-white/5 border border-white/10 px-4 py-3 rounded-xl focus:border-[#CCFF00] outline-none text-xs font-mono text-[#CCFF00]"
                       />
                     </div>
                     <div>
@@ -7709,14 +7884,15 @@ export default function App() {
                     </label>
                     <input
                       required
-                      type="number"
-                      value={newPkg.price}
-                      onChange={(e) =>
+                      type="text"
+                      value={newPkg.price === 0 ? "" : newPkg.price?.toLocaleString('en-US') || ""}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/[^0-9]/g, "");
                         setNewPkg({
                           ...newPkg,
-                          price: parseInt(e.target.value),
-                        })
-                      }
+                          price: parseInt(digits) || 0,
+                        });
+                      }}
                       className="w-full bg-white/5 border border-white/10 px-4 py-3 rounded-xl focus:border-[#CCFF00] outline-none text-xs font-mono"
                     />
                   </div>
@@ -8170,6 +8346,71 @@ export default function App() {
       </div>
 
       <AnimatePresence>
+        {isRenewSelectModalOpen && renewingMember && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsRenewSelectModalOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-black border border-white/10 w-full max-w-xl rounded-[2.5rem] shadow-[0_0_100px_rgba(0,0,0,1)] p-8 max-h-[90vh] flex flex-col z-[120]"
+            >
+              <div className="mb-6">
+                <h3 className="text-2xl font-black italic uppercase tracking-tighter text-[#CCFF00]">
+                  GIA HẠN HỘI VIÊN
+                </h3>
+                <p className="text-[11px] font-mono text-zinc-400 mt-1 uppercase tracking-widest">
+                  HỘI VIÊN: {renewingMember.fullName} ({renewingMember.memberCode})
+                </p>
+                <p className="text-[10px] font-mono text-zinc-500 mt-1 italic">
+                  Gói hiện tại: {renewingMember.package || "Chưa đăng ký"}
+                </p>
+              </div>
+
+              <div className="overflow-y-auto custom-scrollbar flex-1 pr-1 space-y-3 py-2">
+                <p className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest mb-2 italic">
+                  CHỌN GÓI TẬP MUỐN GIA HẠN:
+                </p>
+                {packages.map((pkg) => (
+                  <button
+                    type="button"
+                    key={pkg.id}
+                    onClick={() => {
+                      confirmAction(
+                        "XÁC NHẬN GIA HẠN",
+                        `Gia hạn gói tập [${pkg.name}] cho hội viên ${renewingMember.fullName} với giá ${pkg.price.toLocaleString()}đ?`,
+                        () => handleMemberRenewWithPackage(renewingMember, pkg.name),
+                        "info"
+                      );
+                    }}
+                    className="w-full bg-white/5 border border-white/10 hover:border-[#CCFF00] hover:bg-[#CCFF00]/5 transition-all p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between text-left gap-4"
+                  >
+                    <div>
+                      <p className="text-[11px] font-black uppercase italic text-white">{pkg.name}</p>
+                      <p className="text-[9px] font-mono text-zinc-500 mt-1 uppercase tracking-wider">{pkg.duration} • {pkg.description}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-base font-black text-[#CCFF00] tracking-tighter">{pkg.price.toLocaleString()}đ</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setIsRenewSelectModalOpen(false)}
+                  className="w-full py-4 bg-zinc-900 border border-white/10 rounded-xl text-[10px] font-black uppercase text-zinc-500 hover:text-white transition-all"
+                >
+                  ĐÓNG
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {isRenewalModalOpen && selectedRenewPackage && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
             <motion.div
@@ -8342,43 +8583,60 @@ export default function App() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-2">Email</label>
+                    <label className="block text-[10px] font-mono text-[#CCFF00] uppercase mb-2 italic underline text-xs">Email (Phải dùng đuôi @fit.com)</label>
                     <input
                       required
                       type="email"
+                      placeholder="example@fit.com"
                       value={newStaff.email}
-                      onChange={e => setNewStaff({ ...newStaff, email: e.target.value })}
-                      className="w-full bg-white/5 border border-white/10 p-4 rounded-xl focus:border-[#CCFF00] outline-none text-white text-sm"
+                      onChange={e => {
+                        const val = e.target.value;
+                        setNewStaff({ ...newStaff, email: val, username: val });
+                      }}
+                      className="w-full bg-white/5 border border-white/10 p-4 rounded-xl focus:border-[#CCFF00] outline-none text-[#CCFF00] text-sm font-black"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-2">Tên đăng nhập</label>
+                    <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-2">Tên đăng nhập (Lấy theo Email)</label>
                     <input
-                      required
+                      disabled
+                      readOnly
                       type="text"
-                      value={newStaff.username}
-                      onChange={e => setNewStaff({ ...newStaff, username: e.target.value })}
-                      className="w-full bg-white/5 border border-white/10 p-4 rounded-xl focus:border-[#CCFF00] outline-none text-[#CCFF00] text-sm"
+                      placeholder="Tự động theo email"
+                      value={newStaff.email || ""}
+                      className="w-full bg-white/5 border border-white/5 p-4 rounded-xl outline-none text-zinc-500 text-sm font-mono cursor-not-allowed"
                     />
                   </div>
                   <div>
                     <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-2">Mật khẩu</label>
-                    <input
-                      required={!newStaff.id}
-                      type="password"
-                      placeholder={newStaff.id ? "(Để trống nếu không đổi)" : "Mật khẩu đăng nhập"}
-                      value={newStaff.password}
-                      onChange={e => setNewStaff({ ...newStaff, password: e.target.value })}
-                      className="w-full bg-white/5 border border-white/10 p-4 rounded-xl focus:border-[#CCFF00] outline-none text-white text-sm"
-                    />
+                    <div className="relative">
+                      <input
+                        required={!newStaff.id}
+                        type={showStaffPassword ? "text" : "password"}
+                        placeholder={newStaff.id ? "(Để trống nếu không đổi)" : "Mật khẩu đăng nhập"}
+                        value={newStaff.password || ""}
+                        onChange={e => setNewStaff({ ...newStaff, password: e.target.value })}
+                        className="w-full bg-white/5 border border-white/10 p-4 pr-12 rounded-xl focus:border-[#CCFF00] outline-none text-white text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowStaffPassword(prev => !prev)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                      >
+                        {showStaffPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-2">Lương cơ bản</label>
                     <input
                       required
-                      type="number"
-                      value={newStaff.baseSalary}
-                      onChange={e => setNewStaff({ ...newStaff, baseSalary: parseInt(e.target.value) })}
+                      type="text"
+                      value={newStaff.baseSalary === 0 ? "" : newStaff.baseSalary?.toLocaleString('en-US') || ""}
+                      onChange={e => {
+                        const digits = e.target.value.replace(/[^0-9]/g, "");
+                        setNewStaff({ ...newStaff, baseSalary: parseInt(digits) || 0 });
+                      }}
                       className="w-full bg-white/5 border border-white/10 p-4 rounded-xl focus:border-[#CCFF00] outline-none text-[#CCFF00] font-mono"
                     />
                   </div>
@@ -8386,9 +8644,12 @@ export default function App() {
                     <label className="block text-[10px] font-mono text-zinc-500 uppercase mb-2">Lương/Giờ</label>
                     <input
                       required
-                      type="number"
-                      value={newStaff.hourlyRate}
-                      onChange={e => setNewStaff({ ...newStaff, hourlyRate: parseInt(e.target.value) })}
+                      type="text"
+                      value={newStaff.hourlyRate === 0 ? "" : newStaff.hourlyRate?.toLocaleString('en-US') || ""}
+                      onChange={e => {
+                        const digits = e.target.value.replace(/[^0-9]/g, "");
+                        setNewStaff({ ...newStaff, hourlyRate: parseInt(digits) || 0 });
+                      }}
                       className="w-full bg-white/5 border border-white/10 p-4 rounded-xl focus:border-[#CCFF00] outline-none text-white font-mono"
                     />
                   </div>
@@ -8434,20 +8695,109 @@ export default function App() {
                       <th className="py-4 px-4">Nhân viên</th>
                       <th className="py-4 px-4">Lương CB</th>
                       <th className="py-4 px-4">Thưởng PT</th>
+                      <th className="py-4 px-4">Hoa hồng</th>
                       <th className="py-4 px-4">OT Pay</th>
                       <th className="py-4 px-4 text-right">Tổng nhận</th>
+                      <th className="py-4 px-4 text-center">Thao tác</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {payroll.map(rec => {
                       const staff = staffMembers.find(s => s.id === rec.staffId);
+                      const isEditing = editingPayrollId === rec.id;
+                      
+                      if (isEditing) {
+                        const computedTotal = editBasePay + editPtBonus + editOtPay + editCommission;
+                        return (
+                          <tr key={rec.id} className="text-xs bg-white/[0.02]">
+                            <td className="py-3 px-4 font-black uppercase italic text-white align-middle">{staff?.fullName}</td>
+                            <td className="py-3 px-4 align-middle">
+                              <input
+                                type="text"
+                                value={editBasePay === 0 ? "" : editBasePay.toLocaleString('en-US')}
+                                onChange={e => {
+                                  const digits = e.target.value.replace(/[^0-9]/g, "");
+                                  setEditBasePay(Math.max(0, parseInt(digits) || 0));
+                                }}
+                                className="w-24 bg-zinc-90 w-full min-w-[90px] border border-white/10 px-2 py-1 rounded text-white font-mono text-xs focus:border-[#CCFF00] outline-none"
+                              />
+                            </td>
+                            <td className="py-3 px-4 align-middle">
+                              <input
+                                type="text"
+                                value={editPtBonus === 0 ? "" : editPtBonus.toLocaleString('en-US')}
+                                onChange={e => {
+                                  const digits = e.target.value.replace(/[^0-9]/g, "");
+                                  setEditPtBonus(Math.max(0, parseInt(digits) || 0));
+                                }}
+                                className="w-24 bg-zinc-90 w-full min-w-[90px] border border-white/10 px-2 py-1 rounded text-[#CCFF00] font-mono text-xs focus:border-[#CCFF00] outline-none"
+                              />
+                            </td>
+                            <td className="py-3 px-4 align-middle">
+                              <input
+                                type="text"
+                                value={editCommission === 0 ? "" : editCommission.toLocaleString('en-US')}
+                                onChange={e => {
+                                  const digits = e.target.value.replace(/[^0-9]/g, "");
+                                  setEditCommission(Math.max(0, parseInt(digits) || 0));
+                                }}
+                                className="w-24 bg-zinc-90 w-full min-w-[90px] border border-white/10 px-2 py-1 rounded text-cyan-400 font-mono text-xs focus:border-[#CCFF00] outline-none"
+                              />
+                            </td>
+                            <td className="py-3 px-4 align-middle">
+                              <input
+                                type="text"
+                                value={editOtPay === 0 ? "" : editOtPay.toLocaleString('en-US')}
+                                onChange={e => {
+                                  const digits = e.target.value.replace(/[^0-9]/g, "");
+                                  setEditOtPay(Math.max(0, parseInt(digits) || 0));
+                                }}
+                                className="w-24 bg-zinc-90 w-full min-w-[90px] border border-white/10 px-2 py-1 rounded text-orange-400 font-mono text-xs focus:border-[#CCFF00] outline-none"
+                              />
+                            </td>
+                            <td className="py-3 px-4 text-right font-black text-white text-sm align-middle">
+                              {computedTotal.toLocaleString()}đ
+                            </td>
+                            <td className="py-3 px-4 text-center align-middle space-x-1 whitespace-nowrap">
+                              <button
+                                onClick={() => handleUpdatePayroll(rec.id)}
+                                className="px-2.5 py-1 bg-[#CCFF00] text-black text-[9px] font-black uppercase rounded hover:bg-white transition-colors"
+                              >
+                                Lưu
+                              </button>
+                              <button
+                                onClick={() => setEditingPayrollId(null)}
+                                className="px-2.5 py-1 bg-zinc-800 text-white text-[9px] font-black uppercase rounded border border-white/10 hover:bg-zinc-700 transition-colors"
+                              >
+                                Hủy
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      }
+
                       return (
-                        <tr key={rec.id} className="text-xs">
-                          <td className="py-4 px-4 font-black uppercase italic text-white">{staff?.fullName}</td>
-                          <td className="py-4 px-4 text-zinc-400 font-mono">{rec.basePay.toLocaleString()}đ</td>
-                          <td className="py-4 px-4 text-[#CCFF00] font-mono">{rec.ptBonus.toLocaleString()}đ</td>
-                          <td className="py-4 px-4 text-orange-400 font-mono">{rec.otPay.toLocaleString()}đ</td>
-                          <td className="py-4 px-4 text-right font-black text-white text-sm">{rec.totalPay.toLocaleString()}đ</td>
+                        <tr key={rec.id} className="text-xs hover:bg-white/[0.01] transition-colors">
+                          <td className="py-4 px-4 font-black uppercase italic text-white align-middle">{staff?.fullName}</td>
+                          <td className="py-4 px-4 text-zinc-400 font-mono align-middle">{rec.basePay.toLocaleString()}đ</td>
+                          <td className="py-4 px-4 text-[#CCFF00] font-mono align-middle">{rec.ptBonus.toLocaleString()}đ</td>
+                          <td className="py-4 px-4 text-cyan-400 font-mono align-middle">{(rec.commission || 0).toLocaleString()}đ</td>
+                          <td className="py-4 px-4 text-orange-400 font-mono align-middle">{rec.otPay.toLocaleString()}đ</td>
+                          <td className="py-4 px-4 text-right font-black text-white text-sm align-middle">{rec.totalPay.toLocaleString()}đ</td>
+                          <td className="py-4 px-4 text-center align-middle">
+                            <button
+                              onClick={() => {
+                                setEditingPayrollId(rec.id);
+                                setEditBasePay(rec.basePay);
+                                setEditPtBonus(rec.ptBonus);
+                                setEditOtPay(rec.otPay);
+                                setEditCommission(rec.commission || 0);
+                              }}
+                              className="px-3 py-1 bg-white/5 border border-white/10 rounded text-[9px] font-black uppercase tracking-tight text-[#CCFF00] hover:bg-[#CCFF00]/10 transition-all"
+                            >
+                              Sửa
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -8508,41 +8858,55 @@ export default function App() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline underline-offset-4">
-                      EMAIL
+                    <label className="block text-[10px] font-mono text-[#CCFF00] uppercase tracking-widest mb-2 italic underline underline-offset-4">
+                      EMAIL (Yêu cầu đuôi @fit.com)
                     </label>
                     <input
                       required
                       type="email"
+                      placeholder="example@fit.com"
                       value={newPT.email}
-                      onChange={(e) => setNewPT({ ...newPT, email: e.target.value })}
-                      className="w-full bg-white/5 border border-white/10 px-5 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-sm font-mono"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNewPT({ ...newPT, email: val, username: val });
+                      }}
+                      className="w-full bg-white/5 border border-white/10 px-5 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-sm font-mono text-[#CCFF00]"
                     />
                   </div>
                   <div>
                     <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline underline-offset-4">
-                      TÊN ĐĂNG NHẬP
+                      TÊN ĐĂNG NHẬP (TỰ ĐỘNG THEO EMAIL)
                     </label>
                     <input
-                      required
+                      disabled
+                      readOnly
                       type="text"
-                      value={newPT.username}
-                      onChange={(e) => setNewPT({ ...newPT, username: e.target.value })}
-                      className="w-full bg-white/5 border border-white/10 px-5 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-sm font-mono text-[#CCFF00]"
+                      placeholder="TỰ ĐỘNG THEO EMAIL"
+                      value={newPT.email || ""}
+                      className="w-full bg-white/5 border border-white/5 px-5 py-4 rounded-2xl outline-none text-sm font-mono text-zinc-500 cursor-not-allowed"
                     />
                   </div>
                   <div>
                     <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline underline-offset-4">
                       MẬT KHẨU
                     </label>
-                    <input
-                      required={!newPT.id}
-                      type="password"
-                      placeholder={newPT.id ? "(KHÔNG ĐỔI)" : "MẬT KHẨU"}
-                      value={newPT.password}
-                      onChange={(e) => setNewPT({ ...newPT, password: e.target.value })}
-                      className="w-full bg-white/5 border border-white/10 px-5 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-sm font-mono"
-                    />
+                    <div className="relative">
+                      <input
+                        required={!newPT.id}
+                        type={showPTPassword ? "text" : "password"}
+                        placeholder={newPT.id ? "(KHÔNG ĐỔI)" : "MẬT KHẨU"}
+                        value={newPT.password || ""}
+                        onChange={(e) => setNewPT({ ...newPT, password: e.target.value })}
+                        className="w-full bg-white/5 border border-white/10 px-5 py-4 log-input pr-12 rounded-2xl focus:border-[#CCFF00] outline-none text-sm font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPTPassword(prev => !prev)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                      >
+                        {showPTPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline underline-offset-4">
@@ -8575,16 +8939,53 @@ export default function App() {
                   </div>
                   <div className="col-span-2">
                     <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline underline-offset-4">
-                      CHUYÊN MÔN (PHÂN CÁCH BỞI DẤU PHẨY)
+                      CHUYÊN MÔN (NHẬP TÙY CHỈNH HOẶC CHỌN DANH SÁCH)
                     </label>
                     <input
                       required
                       type="text"
                       placeholder="Yoga, Gym, Boxing..."
-                      value={newPT.expertise.join(", ")}
+                      value={newPT.expertise ? newPT.expertise.join(", ") : ""}
                       onChange={(e) => setNewPT({ ...newPT, expertise: e.target.value.split(",").map(s => s.trim()) })}
                       className="w-full bg-white/5 border border-white/10 px-5 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-sm font-black uppercase italic tracking-tight"
                     />
+                    {/* Predefined expertise badges to click */}
+                    <div className="mt-3">
+                      <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider mb-2">Gợi ý lĩnh vực chuyên môn:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {["GYM", "YOGA", "BOXING", "PILATES", "CARDIO", "KICKFIT", "DANCE", "STRETCHING", "ZUMBA", "AEROBIC"].map((spec) => {
+                          const isSelected = newPT.expertise && newPT.expertise.some(
+                            (e) => e.trim().toUpperCase() === spec
+                          );
+                          return (
+                            <button
+                              key={spec}
+                              type="button"
+                              onClick={() => {
+                                let currentSpecs = newPT.expertise ? [...newPT.expertise].map(s => s.trim()) : [];
+                                currentSpecs = currentSpecs.filter(s => s.length > 0);
+                                
+                                const index = currentSpecs.findIndex(s => s.toUpperCase() === spec);
+                                if (index !== -1) {
+                                  currentSpecs.splice(index, 1);
+                                } else {
+                                  const formattedName = spec.charAt(0) + spec.slice(1).toLowerCase();
+                                  currentSpecs.push(formattedName);
+                                }
+                                setNewPT({ ...newPT, expertise: currentSpecs });
+                              }}
+                              className={`text-[10px] font-black px-3 py-1.5 rounded-xl border uppercase tracking-wider transition-all duration-200 hover:scale-105 active:scale-95 ${
+                                isSelected 
+                                  ? "bg-[#CCFF00] text-black border-[#CCFF00] shadow-[0_4px_12px_rgba(204,255,0,0.2)]" 
+                                  : "bg-zinc-900 border-white/5 text-zinc-400 hover:text-white"
+                              }`}
+                            >
+                              {spec}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -8667,16 +9068,47 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline text-center underline-offset-4">
-                      TỔNG SỐ BUỔI
+                      TỔNG SỐ BUỔI (TÙY CHỈNH)
                     </label>
                     <input
                       required
                       type="number"
                       min="1"
                       value={newPTAssignment.totalSessions || ""}
-                      onChange={(e) => setNewPTAssignment({ ...newPTAssignment, totalSessions: parseInt(e.target.value) })}
+                      onChange={(e) => {
+                        const sessions = parseInt(e.target.value) || 0;
+                        setNewPTAssignment({ ...newPTAssignment, totalSessions: sessions, sessionsLeft: sessions });
+                      }}
                       className="w-full bg-white/5 border border-white/10 px-5 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-center font-black text-xl text-[#CCFF00]"
                     />
+                    {/* Session preset buttons to click */}
+                    <div className="flex flex-wrap gap-1.5 justify-center mt-2.5">
+                      {[10, 24, 30, 48, 100].map((sessions) => (
+                        <button
+                          key={sessions}
+                          type="button"
+                          onClick={() => {
+                            // Suggest dynamic pricing if current price is empty/0 (e.g. 250k / session)
+                            const cleanPrice = newPTAssignment.price && newPTAssignment.price > 0 
+                              ? newPTAssignment.price 
+                              : sessions * 250000;
+                            setNewPTAssignment({ 
+                              ...newPTAssignment, 
+                              totalSessions: sessions,
+                              sessionsLeft: sessions,
+                              price: cleanPrice
+                            });
+                          }}
+                          className={`text-[9px] font-black px-2 py-1 rounded-lg border tracking-wider transition-all duration-150 hover:scale-105 active:scale-95 ${
+                            newPTAssignment.totalSessions === sessions 
+                              ? "bg-[#CCFF00] text-black border-[#CCFF00]" 
+                              : "bg-zinc-900 border-white/5 text-zinc-400 hover:text-white"
+                          }`}
+                        >
+                          {sessions} buổi
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline text-center underline-offset-4">
@@ -8684,12 +9116,13 @@ export default function App() {
                     </label>
                     <input
                       required
-                      type="number"
-                      min="0"
-                      step="1000"
-                      value={newPTAssignment.price || ""}
-                      onChange={(e) => setNewPTAssignment({ ...newPTAssignment, price: parseInt(e.target.value) })}
-                      className="w-full bg-white/5 border border-white/10 px-5 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-center font-black text-sm text-white"
+                      type="text"
+                      value={newPTAssignment.price === 0 ? "" : newPTAssignment.price?.toLocaleString('en-US') || ""}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/[^0-9]/g, "");
+                        setNewPTAssignment({ ...newPTAssignment, price: parseInt(digits) || 0 });
+                      }}
+                      className="w-full bg-white/5 border border-white/10 px-5 py-4 rounded-2xl focus:border-[#CCFF00] outline-none text-center font-black text-sm text-white font-mono"
                     />
                   </div>
                 </div>
@@ -8995,9 +9428,12 @@ export default function App() {
                     <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline text-zinc-400">Giá bán (VND)</label>
                     <input
                       required
-                      type="number"
-                      value={newProduct.price}
-                      onChange={e => setNewProduct({...newProduct, price: parseInt(e.target.value)})}
+                      type="text"
+                      value={newProduct.price === 0 ? "" : newProduct.price?.toLocaleString('en-US') || ""}
+                      onChange={e => {
+                        const digits = e.target.value.replace(/[^0-9]/g, "");
+                        setNewProduct({...newProduct, price: parseInt(digits) || 0});
+                      }}
                       className="w-full bg-white/5 border border-white/10 px-4 py-3 rounded-xl focus:border-[#CCFF00] outline-none text-xs font-mono font-bold"
                     />
                   </div>
@@ -9065,9 +9501,12 @@ export default function App() {
                     <label className="block text-[10px] font-mono text-zinc-500 uppercase tracking-widest mb-2 italic underline text-zinc-400">Số tiền (VND)</label>
                     <input
                       required
-                      type="number"
-                      value={newTransaction.amount}
-                      onChange={e => setNewTransaction({...newTransaction, amount: parseInt(e.target.value)})}
+                      type="text"
+                      value={newTransaction.amount === 0 ? "" : newTransaction.amount?.toLocaleString('en-US') || ""}
+                      onChange={e => {
+                        const digits = e.target.value.replace(/[^0-9]/g, "");
+                        setNewTransaction({...newTransaction, amount: parseInt(digits) || 0});
+                      }}
                       className="w-full bg-white/5 border border-white/10 px-4 py-3 rounded-xl focus:border-[#CCFF00] outline-none text-xs font-mono font-bold"
                     />
                   </div>

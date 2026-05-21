@@ -1,16 +1,27 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
+let aiInstance: GoogleGenAI | null = null;
+function getAI(): GoogleGenAI {
+  if (!aiInstance) {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+      console.warn("WARNING: GEMINI_API_KEY is not defined in the environment. AI features will be disabled or might crash.");
     }
+    aiInstance = new GoogleGenAI({
+      apiKey: key || "TEMPORARY_DEV_KEY",
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
   }
-});
+  return aiInstance;
+}
 
 interface Member {
   id: number;
@@ -243,7 +254,7 @@ async function startServer() {
       commissionRate: 0.15,
       isActive: true,
       phone: "0900112233",
-      email: "huanluyen@gym.com"
+      email: "huanluyen@fit.com"
     },
     {
       id: 2,
@@ -253,7 +264,7 @@ async function startServer() {
       commissionRate: 0.20,
       isActive: true,
       phone: "0900445566",
-      email: "lept@gym.com"
+      email: "lept@fit.com"
     }
   ];
 
@@ -284,10 +295,10 @@ async function startServer() {
 
   // Dữ liệu người dùng mẫu
   const users = [
-    { id: 1, username: "admin", password: "123456", role: "ADMIN", fullName: "Admin System" },
-    { id: 2, username: "staff", password: "123456", role: "STAFF", fullName: "Nhân Viên Tiếp Tân" },
-    { id: 3, username: "pt", password: "123456", role: "PT", fullName: "Huấn Luyện Viên Demo" },
-    { id: 4, username: "member", password: "123456", role: "MEMBER", fullName: "Hội Viên Thử Nghiệm" },
+    { id: 1, username: "admin@fit.com", password: "123456", role: "ADMIN", fullName: "Admin System" },
+    { id: 2, username: "staff@fit.com", password: "123456", role: "STAFF", fullName: "Nhân Viên Tiếp Tân" },
+    { id: 3, username: "pt@fit.com", password: "123456", role: "PT", fullName: "Huấn Luyện Viên Demo" },
+    { id: 4, username: "member@gmail.com", password: "123456", role: "MEMBER", fullName: "Hội Viên Thử Nghiệm" },
   ];
 
   let staffMembers: StaffMember[] = [
@@ -299,7 +310,7 @@ async function startServer() {
       baseSalary: 15000000,
       hourlyRate: 100000,
       phoneNumber: "0988776655",
-      email: "admin@gym.com",
+      email: "admin@fit.com",
       username: "admin_user",
       password: "password123",
       isActive: true,
@@ -313,7 +324,7 @@ async function startServer() {
       baseSalary: 7000000,
       hourlyRate: 50000,
       phoneNumber: "0977665544",
-      email: "letan@gym.com",
+      email: "letan@fit.com",
       username: "staff_user",
       password: "password123",
       isActive: true,
@@ -324,15 +335,38 @@ async function startServer() {
   let attendanceLogs: AttendanceLog[] = [];
   let payrollRecords: PayrollRecord[] = [];
 
-  let products: Product[] = [
+  const PRODUCTS_FILE_PATH = path.join(process.cwd(), "products-data.json");
+  let products: Product[] = [];
+
+  const defaultProducts: Product[] = [
     { id: 1, name: "Whey Protein 2kg", category: "Thực phẩm bổ sung", price: 1500000, stock: 15, image: "https://images.unsplash.com/photo-1593095191850-2a733cd0927e?auto=format&fit=crop&q=80&w=400" },
     { id: 2, name: "Găng tay tập gym", category: "Phụ kiện", price: 250000, stock: 20, image: "https://images.unsplash.com/photo-1583454110551-21f2fa2adfcd?auto=format&fit=crop&q=80&w=400" },
     { id: 3, name: "Bình nước 1L", category: "Phụ kiện", price: 120000, stock: 50, image: "https://images.unsplash.com/photo-1602143399827-bd953672d422?auto=format&fit=crop&q=80&w=400" },
     { id: 4, name: "Nước suối Aquafina", category: "Nước uống", price: 10000, stock: 100, image: "https://images.unsplash.com/photo-1548839140-29a749e1cf3d?auto=format&fit=crop&q=80&w=400" },
     { id: 5, name: "Sting dâu", category: "Nước uống", price: 15000, stock: 45, image: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&q=80&w=400" },
     { id: 6, name: "Khăn lau mồ hôi", category: "Phụ kiện", price: 50000, stock: 30, image: "https://images.unsplash.com/photo-1620912189865-07205168923a?auto=format&fit=crop&q=80&w=400" },
-    { id: 7, name: "BCAA Powder", category: "Thực phẩm bổ sung", price: 850000, stock: 10, image: "https://images.unsplash.com/photo-1579722820308-d74e5719d38f?auto=format&fit=crop&q=80&w=400" },
+    { id: 7, name: "BCAA Powder", category: "Thực phẩm bổ sung", price: 850000, stock: 10, image: "https://images.unsplash.com/photo-1579722820308-d74e5719d38f0?auto=format&fit=crop&q=80&w=400" },
   ];
+
+  try {
+    if (fs.existsSync(PRODUCTS_FILE_PATH)) {
+      products = JSON.parse(fs.readFileSync(PRODUCTS_FILE_PATH, "utf8"));
+    } else {
+      products = [...defaultProducts];
+      fs.writeFileSync(PRODUCTS_FILE_PATH, JSON.stringify(products, null, 2), "utf8");
+    }
+  } catch (err) {
+    console.error("Error loading products-data.json, using fallback", err);
+    products = [...defaultProducts];
+  }
+
+  const saveProducts = () => {
+    try {
+      fs.writeFileSync(PRODUCTS_FILE_PATH, JSON.stringify(products, null, 2), "utf8");
+    } catch (err) {
+      console.error("Error writing products-data.json", err);
+    }
+  };
 
   let transactions: Transaction[] = [
     { id: 1, type: "EXPENSE", amount: 2000000, category: "Tiền điện", note: "Thanh toán điện tháng 4", date: "2024-04-30", createdBy: "admin", customerName: "Văn phòng" },
@@ -374,35 +408,130 @@ async function startServer() {
   // ==========================================
 
   app.get("/api/staff", (req, res) => {
-    res.json(staffMembers.filter(s => s.isActive));
+    // Offset PT IDs by 1000 to avoid ID collision and keep ADMIN hidden
+    const activeStaff = staffMembers.filter(s => s.isActive && s.role !== "ADMIN");
+    const trainerStaff = personalTrainers.filter(t => t.isActive).map(pt => ({
+      id: pt.id + 1000,
+      fullName: pt.fullName,
+      role: "PT" as const,
+      position: `HLV (PT - ${pt.level})`,
+      baseSalary: pt.level === "Master" ? 12000000 : (pt.level === "Senior" ? 9000000 : 7000000),
+      hourlyRate: pt.level === "Master" ? 100000 : (pt.level === "Senior" ? 80000 : 60000),
+      phoneNumber: pt.phone,
+      email: pt.email,
+      username: pt.username || pt.email,
+      password: pt.password || "123456",
+      isActive: pt.isActive,
+      shiftHours: { start: "08:00", end: "21:00" }
+    }));
+    res.json([...activeStaff, ...trainerStaff]);
   });
 
   app.post("/api/staff", (req, res) => {
-    const maxId = staffMembers.length > 0 ? Math.max(...staffMembers.map(s => s.id)) : 0;
-    const newStaff = { id: maxId + 1, isActive: true, ...req.body };
-    staffMembers.push(newStaff);
-    res.status(201).json(newStaff);
+    if (req.body.email && !req.body.email.toLowerCase().endsWith("@fit.com")) {
+      return res.status(400).json({ message: "Nhân viên bắt buộc sử dụng email đuôi @fit.com." });
+    }
+    if (req.body.role === "PT") {
+      const maxId = personalTrainers.length > 0 ? Math.max(...personalTrainers.map(t => t.id)) : 0;
+      const newPT: PersonalTrainer = {
+        id: maxId + 1,
+        fullName: req.body.fullName,
+        expertise: ["Gym", "Cardio"],
+        level: "Junior",
+        commissionRate: 0.15,
+        isActive: true,
+        phone: req.body.phoneNumber || req.body.phone || "",
+        email: req.body.email,
+        username: req.body.username || req.body.email,
+        password: req.body.password || "123456"
+      };
+      personalTrainers.push(newPT);
+      res.status(201).json({
+        id: newPT.id + 1000,
+        fullName: newPT.fullName,
+        role: "PT",
+        position: `Huấn luyện viên (${newPT.level})`,
+        baseSalary: 7000000,
+        hourlyRate: 60000,
+        phoneNumber: newPT.phone,
+        email: newPT.email,
+        username: newPT.username,
+        password: newPT.password,
+        isActive: newPT.isActive,
+        shiftHours: { start: "08:00", end: "21:00" }
+      });
+    } else {
+      const maxId = staffMembers.length > 0 ? Math.max(...staffMembers.map(s => s.id)) : 0;
+      const newStaff = { id: maxId + 1, isActive: true, ...req.body };
+      staffMembers.push(newStaff);
+      res.status(201).json(newStaff);
+    }
   });
 
   app.put("/api/staff/:id", (req, res) => {
     const id = parseInt(req.params.id);
-    const index = staffMembers.findIndex(s => s.id === id);
-    if (index !== -1) {
-      staffMembers[index] = { ...staffMembers[index], ...req.body, id };
-      res.json(staffMembers[index]);
+    if (id >= 1000) {
+      const ptId = id - 1000;
+      const index = personalTrainers.findIndex(t => t.id === ptId);
+      if (index !== -1) {
+        personalTrainers[index] = {
+          ...personalTrainers[index],
+          fullName: req.body.fullName,
+          phone: req.body.phoneNumber || req.body.phone || personalTrainers[index].phone,
+          email: req.body.email || personalTrainers[index].email,
+          username: req.body.username || req.body.email || personalTrainers[index].username,
+          password: req.body.password || personalTrainers[index].password
+        };
+        res.json({
+          id,
+          fullName: personalTrainers[index].fullName,
+          role: "PT",
+          position: `Huấn luyện viên (${personalTrainers[index].level})`,
+          baseSalary: personalTrainers[index].level === "Master" ? 12000000 : (personalTrainers[index].level === "Senior" ? 9000000 : 7000000),
+          hourlyRate: personalTrainers[index].level === "Master" ? 100000 : (personalTrainers[index].level === "Senior" ? 80000 : 60000),
+          phoneNumber: personalTrainers[index].phone,
+          email: personalTrainers[index].email,
+          username: personalTrainers[index].username,
+          password: personalTrainers[index].password,
+          isActive: personalTrainers[index].isActive,
+          shiftHours: { start: "08:00", end: "21:00" }
+        });
+      } else {
+        res.status(404).json({ message: "Không tìm thấy huấn luyện viên" });
+      }
     } else {
-      res.status(404).json({ message: "Không tìm thấy nhân viên" });
+      const index = staffMembers.findIndex(s => s.id === id);
+      if (index !== -1) {
+        if (req.body.email && !req.body.email.toLowerCase().endsWith("@fit.com")) {
+          return res.status(400).json({ message: "Nhân viên bắt buộc sử dụng email đuôi @fit.com." });
+        }
+        staffMembers[index] = { ...staffMembers[index], ...req.body, id };
+        res.json(staffMembers[index]);
+      } else {
+        res.status(404).json({ message: "Không tìm thấy nhân viên" });
+      }
     }
   });
 
   app.delete("/api/staff/:id", (req, res) => {
     const id = parseInt(req.params.id);
-    const staff = staffMembers.find(s => s.id === id);
-    if (staff) {
-      staff.isActive = false;
-      res.json({ success: true });
+    if (id >= 1000) {
+      const ptId = id - 1000;
+      const trainer = personalTrainers.find(t => t.id === ptId);
+      if (trainer) {
+        trainer.isActive = false;
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ message: "Không tìm thấy huấn luyện viên" });
+      }
     } else {
-      res.status(404).json({ message: "Không tìm thấy nhân viên" });
+      const staff = staffMembers.find(s => s.id === id);
+      if (staff) {
+        staff.isActive = false;
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ message: "Không tìm thấy nhân viên" });
+      }
     }
   });
 
@@ -458,27 +587,64 @@ async function startServer() {
 
   app.post("/api/payroll/generate", (req, res) => {
     const { month } = req.body; // format "YYYY-MM"
-    const newRecords: PayrollRecord[] = staffMembers.filter(s => s.isActive).map(staff => {
-      const staffAttendance = attendanceLogs.filter(l => l.staffId === staff.id && l.date.startsWith(month));
+    
+    // Create combined active personnel list for the month (excluding ADMIN)
+    const activeStaff = staffMembers.filter(s => s.isActive && s.role !== "ADMIN");
+    
+    const activeTrainers = personalTrainers.filter(t => t.isActive).map(pt => {
+      let baseSalary = pt.level === "Master" ? 12000000 : (pt.level === "Senior" ? 9000000 : 7000000);
+      let hourlyRate = pt.level === "Master" ? 100000 : (pt.level === "Senior" ? 80000 : 60000);
+      return {
+        id: pt.id + 1000,
+        fullName: pt.fullName,
+        role: "PT" as const,
+        position: `Huấn luyện viên (${pt.level})`,
+        baseSalary,
+        hourlyRate,
+        phoneNumber: pt.phone,
+        email: pt.email,
+        username: pt.username || pt.email,
+        password: pt.password || "123456",
+        isActive: pt.isActive,
+        shiftHours: { start: "08:00", end: "21:00" }
+      };
+    });
+
+    const combinedPersonnel = [...activeStaff, ...activeTrainers];
+
+    const newRecords: PayrollRecord[] = combinedPersonnel.map(person => {
+      const staffAttendance = attendanceLogs.filter(l => l.staffId === person.id && l.date.startsWith(month));
       const totalHours = staffAttendance.reduce((sum, l) => sum + l.totalHours, 0);
       const otHours = staffAttendance.filter(l => l.isOT).reduce((sum, l) => sum + (l.totalHours - 8), 0);
       
-      const basePay = staff.baseSalary;
-      const otPay = otHours * staff.hourlyRate * 1.5;
+      const basePay = person.baseSalary;
+      const otPay = otHours * person.hourlyRate * 1.5;
       
-      // PT Bonus: 50,000đ per session recorded
-      const ptSessions = trainingSessions.filter(s => s.trainerId === staff.id && s.date.startsWith(month)).length;
+      // If of type PT, check the actual trainer ID (offset by 1000)
+      const actualTrainerId = person.id >= 1000 ? person.id - 1000 : person.id;
+      
+      // PT Session Bonus: 50,000đ per session recorded
+      const ptSessions = trainingSessions.filter(s => s.trainerId === actualTrainerId && s.date.startsWith(month)).length;
       const ptBonus = ptSessions * 50000;
 
-      // Commission: 5% of direct sales (if applicable - currently logic is simplified)
-      const commission = 0; 
+      // PT Sales Commission: based on PT assignments for that trainer
+      let commission = 0;
+      if (person.id >= 1000) {
+        const ptId = person.id - 1000;
+        const trainer = personalTrainers.find(t => t.id === ptId);
+        if (trainer) {
+          const trainerAssignments = ptAssignments.filter(a => a.trainerId === ptId);
+          const totalRevenue = trainerAssignments.reduce((sum, a) => sum + a.price, 0);
+          commission = totalRevenue * trainer.commissionRate;
+        }
+      }
 
       const totalPay = basePay + otPay + ptBonus + commission;
 
       const maxId = payrollRecords.length > 0 ? Math.max(...payrollRecords.map(p => p.id)) : 0;
       return {
         id: maxId + 1,
-        staffId: staff.id,
+        staffId: person.id,
         month,
         basePay,
         commission,
@@ -491,6 +657,32 @@ async function startServer() {
 
     payrollRecords = [...payrollRecords, ...newRecords];
     res.status(201).json(newRecords);
+  });
+
+  app.put("/api/payroll/:id", (req, res) => {
+    const id = parseInt(req.params.id);
+    const { basePay, ptBonus, otPay, commission } = req.body;
+    
+    const index = payrollRecords.findIndex(p => p.id === id);
+    if (index !== -1) {
+      const record = payrollRecords[index];
+      const parsedBase = parseInt(basePay) !== undefined && !isNaN(parseInt(basePay)) ? parseInt(basePay) : record.basePay;
+      const parsedPt = parseInt(ptBonus) !== undefined && !isNaN(parseInt(ptBonus)) ? parseInt(ptBonus) : record.ptBonus;
+      const parsedOt = parseInt(otPay) !== undefined && !isNaN(parseInt(otPay)) ? parseInt(otPay) : record.otPay;
+      const parsedCommission = parseInt(commission) !== undefined && !isNaN(parseInt(commission)) ? parseInt(commission) : record.commission;
+      
+      payrollRecords[index] = {
+        ...record,
+        basePay: parsedBase,
+        ptBonus: parsedPt,
+        otPay: parsedOt,
+        commission: parsedCommission,
+        totalPay: parsedBase + parsedPt + parsedOt + parsedCommission
+      };
+      res.json(payrollRecords[index]);
+    } else {
+      res.status(404).json({ message: "Không tìm thấy bản ghi lương" });
+    }
   });
 
   // ==========================================
@@ -565,67 +757,101 @@ async function startServer() {
     const cleanPassword = password.toString().trim();
 
     console.log(`[LOGIN] Attempt: ${cleanUsername}`);
+
+    // Map default accounts seamlessly for user convenience
+    let processedUsername = cleanUsername;
+    if (cleanUsername === "admin") processedUsername = "admin@fit.com";
+    else if (cleanUsername === "staff") processedUsername = "staff@fit.com";
+    else if (cleanUsername === "pt") processedUsername = "pt@fit.com";
+    else if (cleanUsername === "member") processedUsername = "member@gmail.com";
+
+    // 1. Check in static users array
     const user = users.find(u => 
-      u.username.toLowerCase() === cleanUsername && 
+      u.username.toLowerCase() === processedUsername && 
       u.password === cleanPassword
     );
     
     if (user) {
-      console.log(`[LOGIN] Success: ${cleanUsername} (Role: ${user.role})`);
+      // Validate correct email domains according to roles
+      if (user.role === "MEMBER") {
+        if (!processedUsername.endsWith("@gmail.com")) {
+          return res.status(400).json({ message: "Hội viên bắt buộc dùng tài khoản email đuôi @gmail.com." });
+        }
+      } else {
+        // ADMIN, STAFF, PT roles must use @fit.com
+        if (!processedUsername.endsWith("@fit.com") && processedUsername !== "admin") {
+          return res.status(400).json({ message: "Tài khoản Lễ tân / PT / Quản trị bắt buộc dùng email đuôi @fit.com." });
+        }
+      }
+      
+      console.log(`[LOGIN] Success: ${processedUsername} (Role: ${user.role})`);
       const { password: _, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
-    } else {
-      // Kiểm tra tài khoản Hội viên (Sử dụng username hoặc email)
-      const member = members.find(m => 
-        (m.username && m.username.toLowerCase() === cleanUsername) || 
-        (m.email && m.email.toLowerCase() === cleanUsername)
-      );
-      if (member && (cleanPassword === "123456" || cleanPassword === member.password)) {
-        console.log(`[LOGIN] Member Success: ${member.fullName}`);
-        return res.json({
-          id: member.id,
-          username: member.username || member.email,
-          fullName: member.fullName,
-          role: "MEMBER",
-          avatar: member.avatar
-        });
-      }
-
-      // Kiểm tra tài khoản Nhân viên
-      const staff = staffMembers.find(s => 
-        (s.username && s.username.toLowerCase() === cleanUsername) || 
-        (s.email && s.email.toLowerCase() === cleanUsername)
-      );
-      if (staff && (cleanPassword === "123456" || cleanPassword === staff.password)) {
-        console.log(`[LOGIN] Staff Success: ${staff.fullName}`);
-        return res.json({
-          id: staff.id,
-          username: staff.username || staff.email,
-          fullName: staff.fullName,
-          role: staff.role,
-          avatar: ""
-        });
-      }
-
-      // Kiểm tra tài khoản HLV
-      const trainer = personalTrainers.find(t => 
-        (t.username && t.username.toLowerCase() === cleanUsername) || 
-        (t.email && t.email.toLowerCase() === cleanUsername)
-      );
-      if (trainer && (cleanPassword === "123456" || cleanPassword === trainer.password)) {
-        console.log(`[LOGIN] Trainer Success: ${trainer.fullName}`);
-        return res.json({
-          id: trainer.id,
-          username: trainer.username || trainer.email,
-          fullName: trainer.fullName,
-          role: "PT",
-          avatar: trainer.avatar
-        });
-      }
-
-      console.log(`[LOGIN] Failed: ${cleanUsername}`);
-      res.status(401).json({ message: "Sai tài khoản hoặc mật khẩu." });
+      return res.json(userWithoutPassword);
     }
+
+    // 2. Check Member Accounts (Hội viên)
+    const member = members.find(m => 
+      (m.username && m.username.toLowerCase() === processedUsername) || 
+      (m.email && m.email.toLowerCase() === processedUsername)
+    );
+    if (member && (cleanPassword === "123456" || cleanPassword === member.password)) {
+      // Strictly require @gmail.com email domain for login!
+      const emailToCheck = member.email || member.username || processedUsername;
+      if (!emailToCheck.toLowerCase().endsWith("@gmail.com")) {
+        return res.status(400).json({ message: "Hội viên bắt buộc đăng nhập bằng email đuôi @gmail.com." });
+      }
+      console.log(`[LOGIN] Member Success: ${member.fullName}`);
+      return res.json({
+        id: member.id,
+        username: member.username || member.email,
+        fullName: member.fullName,
+        role: "MEMBER",
+        avatar: member.avatar
+      });
+    }
+
+    // 3. Check Staff Accounts (Nhân viên)
+    const staff = staffMembers.find(s => 
+      s.email && s.email.toLowerCase() === processedUsername
+    );
+    if (staff && (cleanPassword === "123456" || cleanPassword === staff.password)) {
+      // Strictly require @fit.com email domain for login!
+      const emailToCheck = staff.email || processedUsername;
+      if (!emailToCheck.toLowerCase().endsWith("@fit.com")) {
+        return res.status(400).json({ message: "Nhân viên bắt buộc đăng nhập bằng email đuôi @fit.com." });
+      }
+      console.log(`[LOGIN] Staff Success: ${staff.fullName}`);
+      return res.json({
+        id: staff.id,
+        username: staff.email,
+        fullName: staff.fullName,
+        role: staff.role,
+        avatar: ""
+      });
+    }
+
+    // 4. Check Trainer Accounts (HLV / PT)
+    const trainer = personalTrainers.find(t => 
+      t.email && t.email.toLowerCase() === processedUsername
+    );
+    if (trainer && (cleanPassword === "123456" || cleanPassword === trainer.password)) {
+      // Strictly require @fit.com email domain for login!
+      const emailToCheck = trainer.email || processedUsername;
+      if (!emailToCheck.toLowerCase().endsWith("@fit.com")) {
+        return res.status(400).json({ message: "Huấn luyện viên bắt buộc đăng nhập bằng email đuôi @fit.com." });
+      }
+      console.log(`[LOGIN] Trainer Success: ${trainer.fullName}`);
+      return res.json({
+        id: trainer.id,
+        username: trainer.email,
+        fullName: trainer.fullName,
+        role: "PT",
+        avatar: trainer.avatar
+      });
+    }
+
+    console.log(`[LOGIN] Failed: ${processedUsername}`);
+    res.status(401).json({ message: "Sai tài khoản hoặc mật khẩu." });
   });
 
   app.post("/api/forgot-password", (req, res) => {
@@ -649,6 +875,10 @@ async function startServer() {
     
     if (!fullName || !email || !password) {
       return res.status(400).json({ message: "Vui lòng điền đầy đủ thông tin bắt buộc." });
+    }
+
+    if (!email.toLowerCase().endsWith("@gmail.com")) {
+      return res.status(400).json({ message: "Đăng ký hội viên bắt buộc sử dụng email đuôi @gmail.com." });
     }
 
     const existingMember = members.find(m => m.email && m.email.toLowerCase() === email.toLowerCase());
@@ -785,6 +1015,10 @@ async function startServer() {
   app.post("/api/members", (req, res) => {
     const { paymentDate, createdBy, paymentMethod, discount, ...rest } = req.body;
     
+    if (rest.email && !rest.email.toLowerCase().endsWith("@gmail.com")) {
+      return res.status(400).json({ message: "Hội viên bắt buộc sử dụng email đuôi @gmail.com." });
+    }
+
     // Tìm giá của gói để tính doanh thu
     const pkg = packages.find(p => p.name === rest.package);
     const revenue = pkg ? pkg.price : 0;
@@ -844,6 +1078,9 @@ async function startServer() {
     const memberId = parseInt(req.params.id);
     const index = members.findIndex(m => m.id === memberId);
     if (index !== -1) {
+      if (req.body.email && !req.body.email.toLowerCase().endsWith("@gmail.com")) {
+        return res.status(400).json({ message: "Hội viên bắt buộc sử dụng email đuôi @gmail.com." });
+      }
       const updatedMember = { ...members[index], ...req.body, id: memberId };
       members[index] = updatedMember;
       res.json(updatedMember);
@@ -1026,6 +1263,9 @@ async function startServer() {
   });
 
   app.post("/api/trainers", (req, res) => {
+    if (req.body.email && !req.body.email.toLowerCase().endsWith("@fit.com")) {
+      return res.status(400).json({ message: "Huấn luyện viên bắt buộc sử dụng email đuôi @fit.com." });
+    }
     const maxId = personalTrainers.length > 0 ? Math.max(...personalTrainers.map(t => t.id)) : 0;
     const newTrainer = { id: maxId + 1, isActive: true, ...req.body };
     personalTrainers.push(newTrainer);
@@ -1036,6 +1276,9 @@ async function startServer() {
     const id = parseInt(req.params.id);
     const index = personalTrainers.findIndex(t => t.id === id);
     if (index !== -1) {
+      if (req.body.email && !req.body.email.toLowerCase().endsWith("@fit.com")) {
+        return res.status(400).json({ message: "Huấn luyện viên bắt buộc sử dụng email đuôi @fit.com." });
+      }
       personalTrainers[index] = { ...personalTrainers[index], ...req.body, id };
       res.json(personalTrainers[index]);
     } else {
@@ -1060,9 +1303,12 @@ async function startServer() {
 
   app.post("/api/pt-assignments", (req, res) => {
     const maxId = ptAssignments.length > 0 ? Math.max(...ptAssignments.map(a => a.id)) : 0;
+    const totalSessions = parseInt(req.body.totalSessions) || 12;
     const newAssignment = {
       id: maxId + 1,
       ...req.body,
+      totalSessions,
+      sessionsLeft: totalSessions,
       status: "Active"
     };
     ptAssignments.push(newAssignment);
@@ -1146,6 +1392,7 @@ async function startServer() {
     const maxId = products.length > 0 ? Math.max(...products.map(p => p.id)) : 0;
     const newProduct = { id: maxId + 1, ...req.body };
     products.push(newProduct);
+    saveProducts();
     res.status(201).json(newProduct);
   });
 
@@ -1154,6 +1401,7 @@ async function startServer() {
     const index = products.findIndex(p => p.id === id);
     if (index !== -1) {
       products[index] = { ...products[index], ...req.body, id };
+      saveProducts();
       res.json(products[index]);
     } else {
       res.status(404).json({ message: "Không tìm thấy sản phẩm" });
@@ -1165,6 +1413,7 @@ async function startServer() {
     const index = products.findIndex(p => p.id === id);
     if (index !== -1) {
       products.splice(index, 1);
+      saveProducts();
       res.json({ success: true });
     } else {
       res.status(404).json({ message: "Không tìm thấy sản phẩm" });
@@ -1207,6 +1456,8 @@ async function startServer() {
         product.stock -= item.quantity;
       }
     });
+
+    saveProducts();
 
     // Tạo giao dịch thu nhập
     const maxId = transactions.length > 0 ? Math.max(...transactions.map(t => t.id)) : 0;
@@ -1262,6 +1513,9 @@ async function startServer() {
 
   app.post("/api/ai/churn-prediction", async (req, res) => {
     try {
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(200).json({ analysis: "Tính năng AI hiện đang tắt vì bạn chưa cấu hình khóa API GEMINI_API_KEY trong Settings. Vui lòng thiết lập khóa để kích hoạt tính năng phân tích tự động." });
+      }
       const { memberId } = req.body;
       const member = members.find(m => m.id === parseInt(memberId));
       if (!member) return res.status(404).json({ message: "Không tìm thấy hội viên" });
@@ -1270,7 +1524,7 @@ async function startServer() {
 Hội viên: ${member.fullName}, Ngày đăng ký: ${member.registrationDate}, Gói: ${member.package}, Điểm danh: ${memberCheckins.length} lần, Trạng thái: ${member.status}.
 Trả lời tiếng Việt, phân tích lý do và mức rủi ro (Thấp/Trung bình/Cao) bằng Markdown.`;
       
-      const response = await ai.models.generateContent({
+      const response = await getAI().models.generateContent({
         model: "gemini-3-flash-preview",
         contents: prompt
       });
@@ -1282,6 +1536,9 @@ Trả lời tiếng Việt, phân tích lý do và mức rủi ro (Thấp/Trung 
 
   app.post("/api/ai/behavior-analysis", async (req, res) => {
     try {
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(200).json({ analysis: "Tính năng AI hiện đang tắt vì bạn chưa cấu hình khóa API GEMINI_API_KEY trong Settings. Vui lòng thiết lập khóa để kích hoạt phân tích hành vi hội viên." });
+      }
       const dataSummary = {
         totalMembers: members.length,
         activeCount: members.filter(m => m.status === 'Hoạt động').length,
@@ -1290,7 +1547,7 @@ Trả lời tiếng Việt, phân tích lý do và mức rủi ro (Thấp/Trung 
       };
       const prompt = `Phân tích hành vi khách hàng gym: ${JSON.stringify(dataSummary)}. 1. Xu hướng tập luyện. 2. Chiến lược cải thiện. Trả lời tiếng Việt, Markdown.`;
       
-      const response = await ai.models.generateContent({
+      const response = await getAI().models.generateContent({
         model: "gemini-3-flash-preview",
         contents: prompt
       });
@@ -1305,10 +1562,13 @@ Trả lời tiếng Việt, phân tích lý do và mức rủi ro (Thấp/Trung 
   // ==========================================
   app.post("/api/chat", async (req, res) => {
     try {
+      if (!process.env.GEMINI_API_KEY) {
+        return res.json({ text: "Tính năng trò chuyện AI hiện đang tạm tắt do thiếu khóa GEMINI_API_KEY trong môi trường. Vui lòng cấu hình GEMINI_API_KEY trong mục Settings của dự án để bắt đầu sử dụng." });
+      }
       const { message, history } = req.body;
       const contents = history ? [...history, { role: "user", parts: [{ text: message }] }] : [{ role: "user", parts: [{ text: message }] }];
 
-      const result = await ai.models.generateContent({
+      const result = await getAI().models.generateContent({
         model: "gemini-3-flash-preview",
         contents,
         config: {
