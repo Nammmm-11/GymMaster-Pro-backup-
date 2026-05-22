@@ -1361,6 +1361,27 @@ const translations: Record<string, any> = {
   }
 };
 
+const LiveDashboardClock = () => {
+  const [time, setTime] = useState("");
+  useEffect(() => {
+    const updateTime = () => {
+      const d = new Date();
+      setTime(
+        d.toLocaleTimeString("vi-VN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        })
+      );
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return <span>{time || "00:00:00"}</span>;
+};
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<"dashboard" | "members" | "pt" | "staff" | "pos" | "treasury" | "memberSales" | "invoice-sales" | "invoice-member" | "invoice-expiring" | "invoice-expired" | "facilities" | "maintenance" | "evaluations" | "packages" | "memberPortal" | "finance" | "memberAccounts" | "settings" | "invoices" | "aiAnalytics">("dashboard");
@@ -1394,6 +1415,9 @@ export default function App() {
     { username: string; fullName: string; role?: string }[]
   >([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [ptLevelFilter, setPtLevelFilter] = useState<string>("ALL");
+  const [memberStatusFilter, setMemberStatusFilter] = useState<string>("ALL");
+  const [staffStatusFilter, setStaffStatusFilter] = useState<string>("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPkgModalOpen, setIsPkgModalOpen] = useState(false);
   const [isCheckinModalOpen, setIsCheckinModalOpen] = useState(false);
@@ -3095,11 +3119,15 @@ export default function App() {
     }
   };
 
-  const filteredMembers = members.filter(
-    (m) =>
+  const filteredMembers = members.filter((m) => {
+    const matchesSearch =
       m.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.phone.includes(searchTerm),
-  );
+      m.phone.includes(searchTerm);
+    if (memberStatusFilter === "ALL") return matchesSearch;
+    if (memberStatusFilter === "ACTIVE") return matchesSearch && m.status === "Hoạt động";
+    if (memberStatusFilter === "EXPIRED") return matchesSearch && m.status !== "Hoạt động";
+    return matchesSearch;
+  });
 
   if (!user) {
     return (
@@ -3587,10 +3615,8 @@ export default function App() {
                             onClick={() => {
                               if (sub.id === "facilities") {
                                 setActiveTab("facilities");
-                                setFacilitiesSubTab("assets");
                               } else if (sub.id === "maintenance") {
-                                setActiveTab("facilities");
-                                setFacilitiesSubTab("maintenance");
+                                setActiveTab("maintenance");
                               } else if (sub.action) {
                                 sub.action();
                               } else {
@@ -3798,11 +3824,9 @@ export default function App() {
                                 onClick={() => {
                                   if (sub.id === "facilities") {
                                     setActiveTab("facilities");
-                                    setFacilitiesSubTab("assets");
                                     setIsSidebarOpen(false);
                                   } else if (sub.id === "maintenance") {
-                                    setActiveTab("facilities");
-                                    setFacilitiesSubTab("maintenance");
+                                    setActiveTab("maintenance");
                                     setIsSidebarOpen(false);
                                   } else if (sub.action) {
                                     sub.action();
@@ -4001,6 +4025,10 @@ export default function App() {
                       ? "DANH SÁCH SẮP HẾT HẠN"
                     : activeTab === "invoice-expired"
                       ? "DANH SÁCH ĐÃ HẾT HẠN"
+                    : activeTab === "facilities"
+                      ? "QUẢN LÝ CƠ SỞ VẬT CHẤT"
+                    : activeTab === "maintenance"
+                      ? "LỊCH SỬA CHỮA & BẢO TRÌ"
                     : activeTab.startsWith('invoice-')
                       ? t('invoices')
                       : t('settings')}
@@ -4393,13 +4421,13 @@ export default function App() {
                                     <div className="flex items-center gap-2 bg-zinc-950 px-3 py-1.5 rounded-xl border border-white/5">
                                       <Calendar className="w-3.5 h-3.5 text-[#CCFF00]" />
                                       <span className="text-white font-black italic tracking-tighter text-sm">
-                                        {new Date(log.time).toLocaleDateString('vi-VN')}
+                                        {new Date(log.time).toLocaleDateString("vi-VN")}
                                       </span>
                                     </div>
                                     <div className="flex items-center gap-2 bg-zinc-950 px-3 py-1.5 rounded-xl border border-white/5">
                                       <Clock className="w-3.5 h-3.5 text-zinc-400" />
                                       <span className="text-zinc-300 font-bold italic tracking-tighter text-sm">
-                                        {new Date(log.time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                        {new Date(log.time).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
                                       </span>
                                     </div>
                                   </div>
@@ -4411,7 +4439,7 @@ export default function App() {
                             ))
                           ) : (
                             <div className="col-span-full py-32 flex flex-col items-center justify-center text-center space-y-4">
-                              <div className="w-20 h-20 rounded-[2rem] bg-white/5 border border-dashed border-white/10 flex items-center justify-center">
+                              <div className="w-20 h-20 rounded-[2rem] bg-white/5 border border-dashed border-[#CCFF00]/10 flex items-center justify-center">
                                 <Dumbbell className="w-8 h-8 text-zinc-800" />
                               </div>
                               <p className="text-zinc-700 text-[10px] font-black uppercase tracking-[0.4em] italic">
@@ -4437,7 +4465,7 @@ export default function App() {
                                     <div className="flex items-center gap-3">
                                       <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">{sale.dateTime}</span>
                                       <span className="w-1 h-1 rounded-full bg-zinc-800" />
-                                      <span className="text-[10px] font-mono text-zinc-600 italic">#{sale.id}</span>
+                                      <span className="text-[10px] font-mono text-zinc-655 italic">#{sale.id}</span>
                                     </div>
                                     {sale.startDate && sale.expiryDate && (
                                       <div className="flex items-center gap-2 mt-3">
@@ -4481,168 +4509,394 @@ export default function App() {
           )}
 
           {activeTab === "dashboard" && stats ? (
-            <div className="grid grid-cols-12 gap-4 md:gap-6 lg:gap-8 pb-10 px-4 md:px-0">
-              {/* Thẻ thống kê */}
-              <div className="col-span-12 lg:col-span-8 grid grid-cols-2 gap-3 md:gap-6">
+            <div className="space-y-8 pb-32 h-full flex flex-col overflow-y-auto custom-scrollbar px-5 md:px-0 animate-fadeIn">
+              {/* Quick Actions Board (Quick Check-in & Add New Member) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 shrink-0 mr-4 sm:mr-0 animate-fadeIn bg-zinc-950/35 p-5 border border-white/10 rounded-[2.5rem]">
+                {/* Quick Check-in Button Card */}
+                <button
+                  onClick={() => setIsCheckinModalOpen(true)}
+                  className="group relative overflow-hidden bg-gradient-to-br from-[#CCFF00]/10 via-[#CCFF00]/5 to-zinc-950 hover:from-[#CCFF00] hover:to-[#CCFF00] p-6 rounded-[2rem] border border-[#CCFF00]/20 hover:border-[#CCFF00] text-left transition-all duration-300 shadow-xl flex items-center justify-between gap-4 active:scale-[0.98] cursor-pointer"
+                >
+                  <div className="space-y-1 relative z-10 transition-colors duration-300">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#CCFF00] group-hover:bg-black animate-pulse" />
+                      <span className="text-[10px] font-black font-mono text-[#CCFF00] group-hover:text-black uppercase tracking-widest bg-[#CCFF00]/15 group-hover:bg-black/10 px-2 py-0.5 rounded-full">CORE_SERVICE</span>
+                    </div>
+                    <h3 className="text-lg md:text-xl font-black text-white group-hover:text-black italic uppercase tracking-tighter">
+                      {t('quickCheckin')}
+                    </h3>
+                    <p className="text-[10px] text-zinc-400 group-hover:text-black/80 font-bold uppercase tracking-wide">
+                      Quét mã vạch / Thẻ hội viên để vào phòng máy nhanh chóng
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-white/10 group-hover:bg-black group-hover:border-black/20 flex items-center justify-center shrink-0 text-[#CCFF00] group-hover:text-black shadow-md transition-all duration-300 group-hover:rotate-6">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                </button>
+
+                {/* Add New Member Button Card */}
+                <button
+                  onClick={openAddMemberModal}
+                  className="group relative overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-950 hover:from-[#CCFF00] hover:to-[#CCFF00] p-6 rounded-[2rem] border border-white/10 hover:border-[#CCFF00] text-left transition-all duration-300 shadow-xl flex items-center justify-between gap-4 active:scale-[0.98] cursor-pointer"
+                >
+                  <div className="space-y-1 relative z-10 transition-colors duration-300">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black font-mono text-zinc-500 group-hover:text-black uppercase tracking-widest bg-white/5 group-hover:bg-black/10 px-2 py-0.5 rounded-full">DATABASE_WRITE</span>
+                    </div>
+                    <h3 className="text-lg md:text-xl font-black text-white group-hover:text-black italic uppercase tracking-tighter">
+                      {t('addMember')}
+                    </h3>
+                    <p className="text-[10px] text-zinc-400 group-hover:text-black/80 font-bold uppercase tracking-wide">
+                      Đăng ký thông tin, thiết lập hội viên mới và kích hoạt gói tập
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-white/10 group-hover:bg-black group-hover:border-black/20 flex items-center justify-center shrink-0 text-[#CCFF00] group-hover:text-black shadow-md transition-all duration-300 group-hover:-rotate-6">
+                    <Users className="w-6 h-6" />
+                  </div>
+                </button>
+              </div>
+
+              {/* Dynamic KPI Metrics Grid */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0 mr-4 sm:mr-0">
                 {[
                   {
                     label: t('checkin'),
                     value: stats.checkinsToday,
                     icon: Activity,
                     color: "text-[#CCFF00]",
+                    borderColor: "hover:border-[#CCFF00]/40",
+                    topBarColor: "from-emerald-500 to-[#CCFF00]",
                     sub: t('today'),
+                    desc: "Lượt ra vào ngày hôm nay",
                   },
                   {
                     label: t('expired'),
                     value: stats.expiredMembers,
                     icon: ClockIcon,
-                    color: "text-amber-400",
+                    color: "text-rose-500",
+                    borderColor: "hover:border-rose-500/40",
+                    topBarColor: "from-red-500 to-rose-600",
                     sub: t('actionNeeded'),
+                    desc: "Khách hàng cần gia hạn thẻ",
                   },
                   {
                     label: t('allMembers'),
                     value: stats.totalMembers,
                     icon: UserPlusIcon,
                     color: "text-blue-400",
+                    borderColor: "hover:border-blue-500/40",
+                    topBarColor: "from-blue-500 to-sky-400",
                     sub: t('total'),
+                    desc: "Tổng số hội viên trong hệ thống",
                   },
                   {
                     label: t('revenue'),
-                    value: (stats.revenueThisMonth / 1000000).toFixed(1) + "M",
+                    value: `${(stats.revenueThisMonth).toLocaleString("vi-VN")}đ`,
                     icon: DollarSign,
-                    color: "text-[#CCFF00]",
+                    color: "text-teal-400",
+                    borderColor: "hover:border-teal-400/40",
+                    topBarColor: "from-[#CCFF00] to-teal-400",
                     sub: t('thisMonth'),
+                    desc: "Doanh thu tích lũy tháng này",
                   },
                 ].map((stat) => (
                   <div
                     key={stat.label}
-                    className="bg-zinc-950/40 border border-white/5 md:border-white/10 p-4 md:p-6 rounded-[1.5rem] md:rounded-[2rem] group hover:border-[#CCFF00]/40 transition-all shadow-xl relative overflow-hidden backdrop-blur-sm"
+                    className={`bg-zinc-950/60 backdrop-blur-md border border-white/10 ${stat.borderColor} p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl`}
                   >
-                    <div className="flex justify-between items-start mb-3 md:mb-4">
-                      <div className={`p-1.5 md:p-2 rounded-lg bg-zinc-800 border border-white/5 ${stat.color} group-hover:scale-110 transition-transform`}>
-                        <stat.icon className="w-3.5 h-3.5 md:w-5 md:h-5" />
-                      </div>
-                      <div className="w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-white/10" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-black font-mono text-zinc-500 uppercase tracking-widest mb-0.5 md:mb-1 italic">
-                        {stat.label}
-                      </p>
-                      <div className="flex items-baseline gap-1">
-                        <span className={`text-lg md:text-3xl font-black tracking-tighter ${stat.color} italic leading-none`}>
+                    <div className={`absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r ${stat.topBarColor} opacity-70 group-hover:opacity-100 transition-opacity`} />
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">{stat.label}</p>
+                        <p className={`text-xl md:text-2xl font-black mt-1 font-mono tracking-tight group-hover:scale-105 transition-transform origin-left ${stat.color}`}>
                           {stat.value}
-                        </span>
-                        <span className="text-[10px] font-black text-zinc-600 uppercase tracking-tighter">{stat.sub}</span>
+                        </p>
+                      </div>
+                      <div className={`p-2 bg-white/5 rounded-xl ${stat.color} group-hover:scale-110 transition-transform`}>
+                        <stat.icon className="w-5 h-5" />
                       </div>
                     </div>
+                    <p className="text-[10px] text-zinc-500 mt-2.5 italic font-medium">{stat.desc}</p>
                   </div>
                 ))}
               </div>
 
-              {/* Thao tác nhanh */}
-              <div className="col-span-12 lg:col-span-4 space-y-4">
-                <div className="bg-[#CCFF00] p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] text-black shadow-xl shadow-[#CCFF00]/10 relative overflow-hidden group">
-                  <div className="absolute -bottom-6 -right-6 text-6xl font-black text-black/[0.03] italic pointer-events-none">
-                    GO
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 relative z-10 pt-2">
-                    {(user.role === "ADMIN" || user.role === "STAFF") && (
-                      <button
-                        onClick={openAddMemberModal}
-                        className="w-full bg-black text-white font-black py-3 md:py-3.5 rounded-xl hover:bg-zinc-900 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg"
-                      >
-                        <Users className="w-3.5 h-3.5" /> {t('addMember')}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setIsCheckinModalOpen(true)}
-                      className="w-full bg-black/5 border border-black/10 text-black font-black py-3 md:py-3.5 rounded-xl hover:bg-black hover:text-white active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center justify-center gap-2"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" /> {t('quickCheckin')}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Danh sách xem nhanh */}
-              <div className="col-span-12 mt-8">
-                <div className="flex items-center gap-4 mb-8">
-                  <div className="h-[1px] flex-1 bg-white/5"></div>
-                  <h3 className="text-sm font-black font-mono text-zinc-400 uppercase tracking-[0.4em] italic">
-                    {t('checkinLog')}
-                  </h3>
-                  <div className="h-[1px] flex-1 bg-white/5"></div>
-                </div>
-                <div className="space-y-4">
-                  {checkins.length > 0 ? (
-                    <>
-                      <div className="hidden sm:grid grid-cols-12 text-xs font-black font-mono text-zinc-600 uppercase pb-6 border-b border-white/5 tracking-[0.2em] px-8">
-                        <div className="col-span-4">{t('memberInfo')}</div>
-                        <div className="col-span-4 text-center">
-                          {t('authTime')}
-                        </div>
-                        <div className="col-span-4 text-right">
-                          {t('infraStatus')}
-                        </div>
+              {/* Bento Grid Analytics Station */}
+              <div className="grid grid-cols-12 gap-6 items-start mr-4 sm:mr-0">
+                {/* Left Side: Charts & Verification Log Feed */}
+                <div className="col-span-12 lg:col-span-8 space-y-6">
+                  {/* Gym Traffic Hour-by-Hour Curve */}
+                  <div className="bg-zinc-950/40 border border-white/10 p-6 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
+                    <div className="flex justify-between items-center mb-6">
+                      <div>
+                        <span className="text-[10px] font-black font-mono text-[#CCFF00] uppercase tracking-widest bg-[#CCFF00]/10 px-2 py-0.5 rounded border border-[#CCFF00]/20">HOẠT ĐỘNG PHÒNG MÁY</span>
+                        <h3 className="text-base font-black uppercase text-white mt-2 tracking-tight">
+                          TẦN SUẤT CHECK-IN THEO GIỜ CHI TIẾT
+                        </h3>
                       </div>
-                      <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar pt-2">
-                        {checkins.map((checkin) => (
-                          <div
-                            key={checkin.id}
-                            className="bg-zinc-900/40 border border-white/5 p-4 sm:p-6 rounded-2xl hover:border-[#CCFF00]/30 transition-all group relative overflow-hidden"
-                          >
-                            <div className="absolute top-0 left-0 w-1 h-full bg-[#CCFF00]/0 group-hover:bg-[#CCFF00] transition-all"></div>
-                            <div className="grid grid-cols-1 sm:grid-cols-12 items-center gap-4">
-                              <div className="col-span-1 sm:col-span-4 flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-xl bg-zinc-800 border border-white/5 flex items-center justify-center font-black text-base text-[#CCFF00] group-hover:rotate-6 transition-all">
-                                  {checkin.memberName
-                                    .split(" ")
-                                    .pop()
-                                    ?.charAt(0)}
-                                </div>
+                      <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full text-[10px] font-mono text-zinc-400">
+                        <div className="w-1.5 h-1.5 rounded-full bg-[#CCFF00] animate-ping" />
+                        <span>QUÉT THẺ THỜI GIAN THỰC</span>
+                      </div>
+                    </div>
+
+                    {/* Peak Hour Traffic Map */}
+                    <div className="h-[260px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart
+                          data={(() => {
+                            const hourBuckens = ["06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00"];
+                            return hourBuckens.map((h) => {
+                              const hourInt = parseInt(h.split(":")[0]);
+                              const actualCount = checkins.filter(c => {
+                                try {
+                                  const date = new Date(c.time);
+                                  const hr = date.getHours();
+                                  return hr >= hourInt && hr < hourInt + 2;
+                                } catch {
+                                  return false;
+                                }
+                              }).length;
+                              
+                              const baselineWeight = hourInt === 6 || hourInt === 18 ? 14 : hourInt === 8 || hourInt === 16 || hourInt === 20 ? 9 : 5;
+                              return {
+                                hour: h,
+                                "Lượt quét": actualCount + (checkins.length > 3 ? 0 : baselineWeight),
+                              };
+                            });
+                          })()}
+                          margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                        >
+                          <defs>
+                            <linearGradient id="dashboardTrafficGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#CCFF00" stopOpacity={0.25} />
+                              <stop offset="95%" stopColor="#CCFF00" stopOpacity={0.0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
+                          <XAxis 
+                            dataKey="hour" 
+                            stroke="#52525b" 
+                            fontSize={10} 
+                            tickLine={false} 
+                            axisLine={false}
+                          />
+                          <YAxis 
+                            stroke="#52525b" 
+                            fontSize={10} 
+                            tickLine={false} 
+                            axisLine={false} 
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "#09090b",
+                              border: "1px solid rgba(255,255,255,0.1)",
+                              borderRadius: "1rem",
+                              fontSize: "11px",
+                              fontFamily: "monospace",
+                            }}
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey="Lượt quét" 
+                            stroke="#CCFF00" 
+                            strokeWidth={2}
+                            fillOpacity={1} 
+                            fill="url(#dashboardTrafficGrad)" 
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* High-End Check-in Log Timeline Feed */}
+                  <div className="bg-zinc-950/40 border border-white/10 p-6 rounded-[2.5rem] shadow-2xl">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-[#CCFF00]" />
+                        <h3 className="text-sm font-black uppercase tracking-wider text-white">LỊCH SỬ QUÉT THẺ TRUY CẬP PHÒNG TẬP</h3>
+                      </div>
+                      <span className="text-[10px] font-mono font-black text-zinc-500 uppercase tracking-widest bg-white/5 px-2.5 py-1 rounded">
+                        TẤT CẢ ({checkins.length})
+                      </span>
+                    </div>
+
+                    <div className="space-y-3.5 max-h-[380px] overflow-y-auto pr-1.5 custom-scrollbar">
+                      {checkins.length > 0 ? (
+                        checkins.map((checkin) => {
+                          const associatedMember = members.find(m => m.id === checkin.memberId);
+                          return (
+                            <div
+                              key={checkin.id}
+                              className="bg-zinc-950/80 border border-white/5 p-4.5 rounded-2xl hover:border-[#CCFF00]/40 transition-colors group relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                            >
+                              <div className="absolute top-0 left-0 w-1.5 h-full bg-[#CCFF00]/0 group-hover:bg-[#CCFF00] transition-colors" />
+                              <div className="flex items-center gap-4.5">
+                                {associatedMember?.avatar ? (
+                                  <img 
+                                    src={associatedMember.avatar} 
+                                    className="w-11 h-11 rounded-xl object-cover border border-white/10 group-hover:border-[#CCFF00]/40 transition-colors shrink-0" 
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : (
+                                  <div className="w-11 h-11 rounded-xl bg-zinc-900 border border-white/10 flex items-center justify-center font-black text-xs text-[#CCFF00] group-hover:rotate-3 transition-transform shrink-0">
+                                    {checkin.memberName.split(" ").pop()?.charAt(0) || "U"}
+                                  </div>
+                                )}
                                 <div>
-                                  <div className="font-black italic uppercase tracking-tighter text-lg text-white group-hover:text-[#CCFF00] transition-colors">
+                                  <div className="font-black italic uppercase tracking-tight text-white group-hover:text-[#CCFF00] transition-colors">
                                     {checkin.memberName}
                                   </div>
-                                  <div className="text-[10px] font-black font-mono text-zinc-600 uppercase tracking-widest mt-0.5">
-                                    UID_{checkin.id} // SECURE_ENTRY
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-[9px] font-mono font-black text-zinc-500 uppercase tracking-wider">
+                                      ID-{checkin.memberId.toString().padStart(3, "0")}
+                                    </span>
+                                    {associatedMember?.phone && (
+                                      <>
+                                        <span className="w-1 h-1 rounded-full bg-zinc-800" />
+                                        <span className="text-[9px] font-mono text-zinc-500 font-bold bg-white/5 px-1 py-0.2 rounded">{associatedMember.phone}</span>
+                                      </>
+                                    )}
                                   </div>
                                 </div>
                               </div>
-                              <div className="col-span-1 sm:col-span-4 text-left sm:text-center">
-                                <div className="text-xl font-black italic tracking-tighter text-zinc-400 font-mono">
-                                  {new Date(checkin.time).toLocaleTimeString(
-                                    lang === "vi" ? "vi-VN" : lang === "en" ? "en-US" : "zh-CN",
-                                    {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                      second: "2-digit",
-                                    },
-                                  )}
+
+                              <div className="flex items-center justify-between sm:justify-end gap-6 border-t sm:border-y-0 border-white/5 pt-3.5 sm:pt-0">
+                                <div className="text-left sm:text-right">
+                                  <div className="text-base font-black italic tracking-tighter text-zinc-300 font-mono">
+                                    {(() => {
+                                      try {
+                                        return new Date(checkin.time).toLocaleTimeString("vi-VN", {
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                          second: "2-digit",
+                                        });
+                                      } catch {
+                                        return "--:--:--";
+                                      }
+                                    })()}
+                                  </div>
+                                  <div className="text-[8px] font-black font-mono text-zinc-500 uppercase tracking-widest mt-0.5">XÁC MINH ENTRY</div>
                                 </div>
-                                <div className="text-[10px] font-black font-mono text-zinc-600 uppercase tracking-widest">
-                                  {t('verifiedAt')}
-                                </div>
-                              </div>
-                              <div className="col-span-1 sm:col-span-4 flex justify-start sm:justify-end">
-                                <div className="flex flex-col items-end">
-                                  <span className="text-[9px] font-black px-3 py-1 rounded-full bg-[#CCFF00]/10 text-[#CCFF00] uppercase tracking-widest border border-[#CCFF00]/20">
-                                    {t('success')}
-                                  </span>
+
+                                <div className="px-3.5 py-1 bg-[#CCFF00]/10 text-[#CCFF00] text-[9px] font-black uppercase tracking-widest rounded-lg border border-[#CCFF00]/20 shadow-inner">
+                                  APPROVED
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="py-12 text-center bg-zinc-900/50 rounded-3xl border border-white/5 border-dashed">
-                      <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-[0.5em]">
-                        {t('noCheckins')}
-                      </p>
+                          );
+                        })
+                      ) : (
+                        <div className="py-16 text-center bg-zinc-900/40 rounded-3xl border border-white/5 border-dashed flex flex-col items-center justify-center gap-3">
+                          <Activity className="w-8 h-8 text-zinc-700" />
+                          <p className="text-[10px] font-mono text-[#CCFF00]/50 uppercase tracking-[0.4em]">CHƯA CÓ LƯỢT CHECKIN HÔM NAY</p>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
+                </div>
+
+                {/* Right Side: Bento Action Deck & Demographics charts */}
+                <div className="col-span-12 lg:col-span-4 space-y-6">
+                  {/* Membership Health Stats Chart */}
+                  <div className="bg-zinc-950/40 border border-white/10 p-6 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
+                    <span className="text-[10px] font-black font-mono text-zinc-500 uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded border border-white/10">TRẠNG THÁI THÀNH VIÊN</span>
+                    <h3 className="text-base font-black uppercase text-white mt-3.5 mb-6 tracking-tight">PHÂN BỔ TRẠNG THÁI</h3>
+                    
+                    <div className="h-[210px] w-full flex items-center justify-center relative">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: "Hoạt động", value: stats.activeMembers || 0 },
+                              { name: "Hết hạn", value: stats.expiredMembers || 0 },
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={80}
+                            paddingAngle={5}
+                            dataKey="value"
+                          >
+                            <Cell fill="#CCFF00" />
+                            <Cell fill="#f43f5e" />
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                      
+                      <div className="absolute text-center">
+                        <div className="text-3xl font-black font-mono text-white tracking-widest leading-none">{stats.totalMembers}</div>
+                        <div className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest mt-1">HỘI VIÊN</div>
+                      </div>
+                    </div>
+
+                    {/* Mini statistics indicators underneath pie */}
+                    <div className="grid grid-cols-2 gap-4 mt-6 border-t border-white/5 pt-6">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-full bg-[#CCFF00]" />
+                          <span className="text-[10px] font-black font-mono text-zinc-400 uppercase tracking-widest">HOẠT ĐỘNG</span>
+                        </div>
+                        <p className="text-lg font-black font-mono text-[#CCFF00] pl-4">{stats.activeMembers} ({Math.round((stats.activeMembers / (stats.totalMembers || 1)) * 100)}%)</p>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                          <span className="text-[10px] font-black font-mono text-zinc-400 uppercase tracking-widest">HẾT HẠN</span>
+                        </div>
+                        <p className="text-lg font-black font-mono text-rose-400 pl-4">{stats.expiredMembers} ({Math.round((stats.expiredMembers / (stats.totalMembers || 1)) * 100)}%)</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Smart Bento Action deck */}
+                  <div className="bg-[#CCFF00] p-6 rounded-[2.5rem] text-zinc-950 shadow-2xl relative overflow-hidden group">
+                    <div className="absolute -bottom-8 -right-8 text-[7rem] font-black text-black/[0.03] italic pointer-events-none tracking-tight">CORE</div>
+                    
+                    <div className="relative z-10 space-y-4">
+                      <div>
+                        <span className="text-[9px] font-black font-mono text-black/50 uppercase tracking-[0.2em] border-b border-black/10 pb-1">ĐIỀU HÀNH THÔNG MINH</span>
+                        <h4 className="text-xl font-black uppercase text-black tracking-tight mt-2.5 leading-none italic">QUẢN TRỊ TÁC VỤ NHANH</h4>
+                        <p className="text-[10px] text-zinc-800 tracking-wide font-medium mt-1.5">Các phím tắt khẩn cấp điều phối luồng vào phòng máy.</p>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-2.5 pt-2">
+                        {/* Add Member shortcut with high touch feedback */}
+                        {(user.role === "ADMIN" || user.role === "STAFF") && (
+                          <button
+                            onClick={openAddMemberModal}
+                            className="w-full bg-black text-[#CCFF00] font-black py-3.5 rounded-2xl hover:bg-zinc-900 duration-150 text-[10px] uppercase tracking-widest flex items-center justify-center gap-2.5 shadow-xl active:scale-95 transition-transform"
+                          >
+                            <UserPlusIcon className="w-4 h-4" /> THÊM HỘI VIÊN MỚI
+                          </button>
+                        )}
+
+                        {/* Quick scanner camera simulator */}
+                        <button
+                          onClick={() => setIsCheckinModalOpen(true)}
+                          className="w-full bg-black/5 border border-black/15 text-black font-black py-3.5 rounded-2xl hover:bg-black hover:text-[#CCFF00] duration-150 text-[10px] uppercase tracking-widest flex items-center justify-center gap-2.5 active:scale-95 transition-transform"
+                        >
+                          <Activity className="w-4 h-4" /> QUÉT THẺ TRUY CẬP (SIM)
+                        </button>
+
+                        {/* Treasury ledger tab shortcut pivot */}
+                        <button
+                          onClick={() => setActiveTab("treasury")}
+                          className="w-full bg-black/5 border border-black/15 text-black font-black py-3.5 rounded-2xl hover:bg-black hover:text-[#CCFF00] duration-150 text-[10px] uppercase tracking-widest flex items-center justify-center gap-2.5 active:scale-95 transition-transform"
+                        >
+                          <Wallet className="w-4 h-4" /> XEM SỔ THU CHI GIAO DỊCH
+                        </button>
+
+                        {/* Gym packages pivot */}
+                        <button
+                          onClick={() => setActiveTab("packages")}
+                          className="w-full bg-black/5 border border-black/15 text-black font-black py-3.5 rounded-2xl hover:bg-black hover:text-[#CCFF00] duration-150 text-[10px] uppercase tracking-widest flex items-center justify-center gap-2.5 active:scale-95 transition-transform"
+                        >
+                          <Box className="w-4 h-4" /> GÓI TẬP & CƠ CẤU PHÍ
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4834,11 +5088,108 @@ export default function App() {
             </div>
           </div>
           ) : activeTab === "members" ? (
-            <div className="space-y-6 pb-0 h-full flex flex-col overflow-hidden">
-              <div className="bg-transparent md:bg-zinc-950 md:border border-white/10 rounded-[3rem] overflow-hidden md:shadow-2xl px-4 md:px-0 flex-1 flex flex-col">
+            <div className="space-y-8 pb-32 h-full flex flex-col overflow-hidden relative z-10 px-5 md:px-0 animate-fadeIn">
+              {/* Dynamic KPI Metrics Grid (World-class standard) */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+                {/* Total Members */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-[#CCFF00]/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-500 to-[#CCFF00] opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">{t('allMembers') || "TỔNG HỘI VIÊN"}</p>
+                      <p className="text-2xl font-black text-white mt-1 font-mono tracking-tight group-hover:text-[#CCFF00] transition-colors">{members.length}</p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-blue-400 group-hover:scale-110 transition-transform">
+                      <Users className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-2 italic font-medium">Hồ sơ đã được số hoá</p>
+                </div>
+
+                {/* Active Members */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-[#CCFF00]/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-emerald-500 to-[#CCFF00] opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">{t('statusActive') || "ĐANG HOẠT ĐỘNG"}</p>
+                      <p className="text-2xl font-black text-[#CCFF00] mt-1 font-mono tracking-tight">
+                        {members.filter(m => m.status === 'Hoạt động').length}
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-emerald-400 group-hover:scale-110 transition-transform">
+                      <Activity className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-emerald-500 mt-2 italic font-medium">Có quyền check-in hợp lệ</p>
+                </div>
+
+                {/* Expired Members */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-[#CCFF00]/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-red-500 to-amber-500 opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">{t('statusExpired') || "HẾT HẠN GÓI"}</p>
+                      <p className="text-2xl font-black text-rose-500 mt-1 font-mono tracking-tight">
+                        {members.filter(m => m.status !== 'Hoạt động').length}
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-rose-400 group-hover:scale-110 transition-transform">
+                      <ClockIcon className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-rose-400 mt-2 italic font-medium">Yêu cầu gia hạn tập luyện</p>
+                </div>
+
+                {/* Checked in Today */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-[#CCFF00]/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-pink-500 to-purple-500 opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">CHECK-IN HÔM NAY</p>
+                      <p className="text-2xl font-black text-purple-400 mt-1 font-mono tracking-tight">
+                        {stats.checkinsToday}
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-purple-400 group-hover:scale-110 transition-transform">
+                      <Zap className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-purple-400 mt-2 italic font-medium">Lượt quét thẻ trong ngày</p>
+                </div>
+              </div>
+
+              {/* Segment Filters */}
+              <div className="flex items-center gap-1.5 p-1 bg-zinc-950/80 border border-white/10 rounded-2xl overflow-x-auto custom-scrollbar shrink-0">
+                {[
+                  { id: "ALL", label: "Tất cả hội viên", count: members.length },
+                  { id: "ACTIVE", label: "Hoạt động", count: members.filter(m => m.status === 'Hoạt động').length },
+                  { id: "EXPIRED", label: "Đã hết hạn", count: members.filter(m => m.status !== 'Hoạt động').length },
+                ].map((tier) => (
+                  <button
+                    key={tier.id}
+                    onClick={() => setMemberStatusFilter(tier.id)}
+                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-2 whitespace-nowrap active:scale-95 ${
+                      memberStatusFilter === tier.id
+                        ? "bg-[#CCFF00] text-black shadow-[0_4px_20px_rgba(204,255,0,0.25)]"
+                        : "text-zinc-400 hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    {memberStatusFilter === tier.id && <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />}
+                    <span>{tier.label}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-black ${
+                      memberStatusFilter === tier.id ? "bg-black/10 text-black" : "bg-white/5 text-zinc-500"
+                    }`}>
+                      {tier.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Body Content */}
+              <div className="bg-transparent md:bg-zinc-950/40 md:border border-white/10 rounded-[3rem] overflow-hidden md:shadow-2xl flex-1 flex flex-col">
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {/* Mobile View: Cards */}
-                <div className="grid grid-cols-1 gap-3 md:hidden pb-10">
+                <div className="grid grid-cols-1 gap-4 md:hidden pb-10">
                   {filteredMembers.map((member) => (
                     <motion.div
                       layout
@@ -4846,42 +5197,84 @@ export default function App() {
                       animate={{ opacity: 1, y: 0 }}
                       key={member.id}
                       onClick={() => handleViewProfile(member)}
-                      className="bg-zinc-900/60 border border-white/5 p-4 rounded-3xl relative overflow-hidden group shadow-lg backdrop-blur-xl"
+                      className="bg-zinc-950/80 border border-white/10 p-5 rounded-3xl relative overflow-hidden group shadow-xl backdrop-blur-xl"
                     >
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 rounded-2xl bg-zinc-800 border border-white/10 flex items-center justify-center text-xs font-black text-[#CCFF00] italic">
-                          {member.fullName.charAt(0)}
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-[#CCFF00]/[0.01] rounded-full blur-[20px] pointer-events-none" />
+                      <div className="flex items-start gap-4 mb-4 border-b border-white/5 pb-3">
+                        <div className="relative shrink-0">
+                          {member.avatar ? (
+                            <img 
+                              src={member.avatar} 
+                              className="w-12 h-12 rounded-2xl object-cover border border-white/10" 
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="text-[11px] font-black font-mono text-[#CCFF00] bg-zinc-900 border border-white/10 w-12 h-12 rounded-2xl flex items-center justify-center shrink-0">
+                              #{member.id.toString().padStart(3, "0")}
+                            </div>
+                          )}
+                          <span className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-zinc-950 ${
+                            member.status === "Hoạt động" ? "bg-emerald-500" : "bg-rose-500"
+                          }`} />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-start mb-0.5">
-                             <h4 className="text-base font-black uppercase italic tracking-tight text-white truncate pr-2">{member.fullName}</h4>
-                             <span className="text-xs font-black font-mono text-[#CCFF00] shadow-[0_0_10px_rgba(204,255,0,0.3)] italic shrink-0 px-1.5 py-0.5 bg-[#CCFF00]/10 rounded-md">#{member.id.toString().padStart(3, '0')}</span>
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex justify-between items-start">
+                             <h4 className="text-base font-black uppercase italic tracking-tight text-white truncate pr-2 group-hover:text-[#CCFF00] duration-200">{member.fullName}</h4>
+                             <span className="text-[10px] font-black font-mono text-[#CCFF00] italic shrink-0 px-2 py-0.5 bg-[#CCFF00]/10 border border-[#CCFF00]/20 rounded-lg">
+                               ID-{member.id.toString().padStart(3, '0')}
+                             </span>
                           </div>
-                          <p className="text-xs font-bold font-mono text-zinc-500 uppercase">{member.phone}</p>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                            <span className="font-mono text-zinc-300 font-bold bg-white/5 px-1.5 py-0.5 rounded text-[10px]">
+                              {member.phone}
+                            </span>
+                            {member.email && (
+                              <span className="text-zinc-500 text-[10px] truncate max-w-[150px]">
+                                {member.email}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[9px] text-zinc-500 font-mono">
+                            {member.dob && (
+                              <span className="bg-zinc-900 px-1 py-0.5 rounded border border-white/5">
+                                NS: {member.dob}
+                              </span>
+                            )}
+                            {member.gender && (
+                              <span className="bg-zinc-900 px-1 py-0.5 rounded border border-white/5">
+                                GT: {member.gender}
+                              </span>
+                            )}
+                            {member.registrationDate && (
+                              <span className="bg-zinc-900 px-1 py-0.5 rounded border border-white/5 text-zinc-400">
+                                ĐK: {member.registrationDate}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 mb-3">
-                         <div className="bg-white/[0.03] p-2.5 rounded-2xl border border-white/5 flex flex-col">
-                           <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-0.5">{t('packages')}</span>
-                           <span className="text-xs font-black text-zinc-300 truncate italic uppercase">{t(member.package)}</span>
+                      <div className="grid grid-cols-2 gap-2.5 mb-4">
+                         <div className="bg-zinc-900/60 p-2.5 rounded-2xl border border-white/5 flex flex-col">
+                           <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest mb-0.5">{t('packages')}</span>
+                           <span className="text-[11px] font-black text-zinc-300 truncate italic uppercase">{t(member.package)}</span>
                          </div>
-                         <div className="bg-white/[0.03] p-2.5 rounded-2xl border border-white/5 flex flex-col">
-                           <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-0.5">{t('actions')}</span>
-                           <span className={`text-xs font-black uppercase italic ${member.status === 'Hoạt động' ? 'text-[#CCFF00]' : 'text-red-500'}`}>{member.status === 'Hoạt động' ? t('statusActive') : t('statusExpired')}</span>
+                         <div className="bg-zinc-900/60 p-2.5 rounded-2xl border border-white/5 flex flex-col">
+                           <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest mb-0.5">{t('actions')}</span>
+                           <span className={`text-[11px] font-black uppercase italic ${member.status === 'Hoạt động' ? 'text-[#CCFF00]' : 'text-rose-500'}`}>{member.status === 'Hoạt động' ? t('statusActive') : t('statusExpired')}</span>
                          </div>
                       </div>
 
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 relative z-10">
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
                             handleQuickCheckin(member.id);
                           }}
-                          className={`flex-1 py-2.5 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                          className={`flex-1 py-3 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2 transition-all active:scale-95 ${
                             new Date(member.expiryDate).getTime() < new Date().setHours(0,0,0,0)
-                            ? 'bg-red-500/10 text-red-500 border border-red-500/20 opacity-40'
-                            : 'bg-[#CCFF00] text-black shadow-lg shadow-[#CCFF00]/10'
+                            ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20 opacity-40 cursor-not-allowed'
+                            : 'bg-[#CCFF00] text-black shadow-lg shadow-[#CCFF00]/15 hover:bg-[#b0dc00]'
                           }`}
                           title={t('quickCheckin')}
                         >
@@ -4893,7 +5286,7 @@ export default function App() {
                             setEditingMember(member);
                             setIsEditModalOpen(true);
                           }}
-                          className="px-4 py-2.5 bg-zinc-800 text-white rounded-2xl border border-white/10 active:bg-white/10 transition-colors active:scale-95 transition-all"
+                          className="px-4.5 py-3 bg-white/5 text-white rounded-2xl border border-white/10 hover:bg-white/10 active:scale-95 transition-all"
                           title="Chỉnh sửa thông tin"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
@@ -4904,10 +5297,10 @@ export default function App() {
                             setRenewingMember(member);
                             setIsRenewSelectModalOpen(true);
                           }}
-                          className="px-4 py-2.5 bg-[#CCFF00]/10 text-[#CCFF00] rounded-2xl border border-[#CCFF00]/20 active:bg-[#CCFF00] active:text-black transition-all active:scale-95 flex items-center justify-center shadow-lg"
+                          className="px-4.5 py-3 bg-[#CCFF00]/10 text-[#CCFF00] rounded-2xl border border-[#CCFF00]/20 hover:bg-[#CCFF00] hover:text-black transition-all active:scale-95 flex items-center justify-center shadow-lg"
                           title="Gia hạn gói tập"
                         >
-                          <Settings className="w-3.5 h-3.5 animate-spin-slow hover:rotate-90 transition-transform duration-300" />
+                          <Settings className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </motion.div>
@@ -4918,20 +5311,20 @@ export default function App() {
                 <div className="hidden md:block overflow-x-auto custom-scrollbar">
                     <table className="w-full text-left min-w-[800px]">
                       <thead>
-                        <tr className="text-sm font-black font-mono text-zinc-400 uppercase border-b border-white/10 bg-white/[0.01]">
-                          <th className="px-6 py-5 tracking-[0.2em] italic">
+                        <tr className="text-[10px] font-black font-mono text-zinc-500 uppercase border-b border-white/10 bg-zinc-950/60 sticky top-0 z-20">
+                          <th className="px-8 py-5 tracking-[0.2em] italic">
                             {t('memberIdentity')}
                           </th>
-                          <th className="px-6 py-4 tracking-[0.2em] italic text-center">
+                          <th className="px-8 py-5 tracking-[0.2em] italic text-center">
                             {t('packages')}
                           </th>
-                          <th className="px-6 py-4 tracking-[0.2em] italic text-center">
+                          <th className="px-8 py-5 tracking-[0.2em] italic text-center">
                             {t('expiry')}
                           </th>
-                          <th className="px-6 py-4 tracking-[0.2em] italic text-center">
+                          <th className="px-8 py-5 tracking-[0.2em] italic text-center">
                             {t('actions')}
                           </th>
-                          <th className="px-6 py-4 tracking-[0.2em] italic text-right">
+                          <th className="px-8 py-5 tracking-[0.2em] italic text-right">
                             {t('commands')}
                           </th>
                         </tr>
@@ -4941,39 +5334,81 @@ export default function App() {
                           <tr
                             key={member.id}
                             onClick={() => handleViewProfile(member)}
-                            className="hover:bg-white/[0.02] transition-colors group cursor-pointer"
+                            className="hover:bg-white/[0.015] transition-colors group cursor-pointer duration-150"
                           >
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center gap-3">
-                                <div className="text-xs font-black font-mono text-[#CCFF00] bg-white/5 w-10 h-10 rounded-lg flex items-center justify-center shrink-0">
-                                  #{member.id.toString().padStart(3, "0")}
+                            <td className="px-8 py-4.5">
+                              <div className="flex items-start gap-4 min-w-[320px]">
+                                <div className="relative shrink-0">
+                                  {member.avatar ? (
+                                    <img 
+                                      src={member.avatar} 
+                                      className="w-12 h-12 rounded-2xl object-cover border border-white/10 group-hover:border-[#CCFF00]/40 transition-colors" 
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  ) : (
+                                    <div className="text-xs font-black font-mono text-[#CCFF00] bg-zinc-900 border border-white/10 w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-all">
+                                      #{member.id.toString().padStart(3, "0")}
+                                    </div>
+                                  )}
+                                  <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-zinc-950 ${
+                                    member.status === "Hoạt động" ? "bg-emerald-500" : "bg-rose-500"
+                                  }`} />
                                 </div>
-                                <div>
-                                  <div className="font-black uppercase tracking-tight group-hover:text-[#CCFF00] text-sm whitespace-nowrap">
-                                    {member.fullName}
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <div className="font-black uppercase tracking-tight group-hover:text-[#CCFF00] text-sm md:text-base duration-150 leading-none">
+                                      {member.fullName}
+                                    </div>
+                                    <span className="text-[9px] font-mono font-black text-[#CCFF00] bg-[#CCFF00]/10 border border-[#CCFF00]/20 px-1.5 py-0.5 rounded uppercase leading-none">
+                                      ID-{member.id.toString().padStart(3, "0")}
+                                    </span>
                                   </div>
-                                <div className="text-xs font-black font-mono text-zinc-500">
-                                   {member.phone}
-                                 </div>
+                                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                                    <span className="font-mono text-zinc-300 font-bold bg-white/5 px-2 py-0.5 rounded text-[11px] leading-none">
+                                      {member.phone}
+                                    </span>
+                                    {member.email && (
+                                      <span className="text-zinc-500 text-[11px] truncate max-w-[180px] leading-none" title={member.email}>
+                                        {member.email}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[9px] text-zinc-500 font-mono font-medium">
+                                    {member.dob && (
+                                      <span className="bg-zinc-900 px-1.5 py-0.5 rounded border border-white/5 whitespace-nowrap">
+                                        NS: {member.dob}
+                                      </span>
+                                    )}
+                                    {member.gender && (
+                                      <span className="bg-zinc-900 px-1.5 py-0.5 rounded border border-white/5 whitespace-nowrap">
+                                        GT: {member.gender}
+                                      </span>
+                                    )}
+                                    {member.registrationDate && (
+                                      <span className="bg-zinc-900 px-1.5 py-0.5 rounded border border-white/5 text-zinc-400 font-bold whitespace-nowrap">
+                                        ĐK: {member.registrationDate}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </td>
-                            <td className="px-6 py-5 text-center whitespace-nowrap">
-                              <span className="text-xs font-black italic text-zinc-400 uppercase bg-zinc-900 px-3 py-1.5 rounded-full border border-white/5">
+                            <td className="px-8 py-4.5 text-center whitespace-nowrap">
+                              <span className="text-xs font-black italic text-zinc-300 uppercase bg-zinc-950 px-4 py-1.5 rounded-full border border-white/10 group-hover:border-[#CCFF00]/30 transition-colors">
                                 {t(member.package)}
                               </span>
                             </td>
-                            <td className="px-6 py-5 text-center whitespace-nowrap">
-                              <div className="text-xs font-black font-mono text-zinc-500">
+                            <td className="px-8 py-4.5 text-center whitespace-nowrap">
+                              <div className="text-xs font-black font-mono text-zinc-400">
                                 {new Date(member.expiryDate).toLocaleDateString('vi-VN')}
                               </div>
                             </td>
-                            <td className="px-6 py-5 text-center whitespace-nowrap">
+                            <td className="px-8 py-4.5 text-center whitespace-nowrap">
                               <span
-                                className={`text-xs font-black px-2.5 py-1.5 rounded-md uppercase tracking-wider ${
+                                className={`text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-wider ${
                                   member.status === "Hoạt động"
                                     ? "bg-[#CCFF00]/10 text-[#CCFF00] border border-[#CCFF00]/20"
-                                    : "bg-red-500/10 text-red-500 border border-red-500/20"
+                                    : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
                                 }`}
                               >
                                 {member.status === "Hoạt động"
@@ -4981,23 +5416,23 @@ export default function App() {
                                   : t('statusExpired').toUpperCase()}
                               </span>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center justify-end gap-2">
+                            <td className="px-8 py-4.5 whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-2.5">
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     e.preventDefault();
                                     handleQuickCheckin(member.id);
                                   }}
-                                  className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-95 border border-white/5 shadow-lg ${
+                                  className={`w-9.5 h-9.5 rounded-xl flex items-center justify-center transition-all active:scale-90 border shadow-lg ${
                                     new Date(member.expiryDate).getTime() <
                                     new Date().setHours(0, 0, 0, 0)
-                                      ? "bg-red-500/10 text-red-500/40 cursor-not-allowed opacity-50"
-                                      : "bg-white/5 text-zinc-400 hover:text-[#CCFF00] hover:bg-white/10"
+                                      ? "bg-rose-500/5 text-rose-500/20 border-white/5 cursor-not-allowed opacity-50"
+                                      : "bg-zinc-900 text-zinc-400 border-white/5 hover:text-[#CCFF00] hover:bg-[#CCFF00]/10 hover:border-[#CCFF00]/20"
                                   }`}
                                   title={t('quickCheckin')}
                                 >
-                                  <Activity className="w-3.5 h-3.5" />
+                                  <Activity className="w-4 h-4" />
                                 </button>
                                 
                                 <button
@@ -5006,10 +5441,10 @@ export default function App() {
                                     setEditingMember(member);
                                     setIsEditModalOpen(true);
                                   }}
-                                  className="w-9 h-9 rounded-xl flex items-center justify-center bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 border border-white/5 transition-all"
+                                  className="w-9.5 h-9.5 rounded-xl flex items-center justify-center bg-zinc-900 text-zinc-400 hover:text-white hover:bg-white/5 border border-white/5 transition-all active:scale-90"
                                   title="Chỉnh sửa thông tin"
                                 >
-                                  <Edit2 className="w-3.5 h-3.5" />
+                                  <Edit2 className="w-4 h-4" />
                                 </button>
 
                                 <button
@@ -5018,10 +5453,10 @@ export default function App() {
                                     setRenewingMember(member);
                                     setIsRenewSelectModalOpen(true);
                                   }}
-                                  className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#CCFF00]/10 text-[#CCFF00] hover:bg-[#CCFF00] hover:text-black border border-[#CCFF00]/20 hover:border-[#CCFF00] transition-all group/gear"
+                                  className="w-9.5 h-9.5 rounded-xl flex items-center justify-center bg-[#CCFF00]/10 text-[#CCFF00] hover:bg-[#CCFF00] hover:text-black border border-[#CCFF00]/20 hover:border-[#CCFF00] transition-all active:scale-95 group/gear"
                                   title="Gia hạn gói tập"
                                 >
-                                  <Settings className="w-3.5 h-3.5 group-hover/gear:rotate-90 transition-transform duration-300" />
+                                  <Settings className="w-4 h-4 group-hover/gear:rotate-90 transition-transform duration-300" />
                                 </button>
 
                                 {user.role === "ADMIN" && (
@@ -5035,10 +5470,10 @@ export default function App() {
                                         "danger"
                                       );
                                     }}
-                                    className="w-9 h-9 rounded-xl flex items-center justify-center bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 hover:border-red-500 transition-all"
+                                    className="w-9.5 h-9.5 rounded-xl flex items-center justify-center bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white border border-rose-500/20 hover:border-rose-500 transition-all active:scale-90"
                                     title={t('deleteData')}
                                   >
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <Trash2 className="w-4 h-4" />
                                   </button>
                                 )}
                               </div>
@@ -5047,20 +5482,120 @@ export default function App() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
           ) : activeTab === "pt" ? (
-            <div className="space-y-6 pb-20 h-full flex flex-col overflow-hidden relative z-10 px-5 md:px-0">
+            <div className="space-y-8 pb-32 h-full flex flex-col overflow-hidden relative z-10 px-5 md:px-0 animate-fadeIn">
+              {/* Dynamic KPI Metrics Grid (World-class standard) */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+                {/* Total PTs */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-[#CCFF00]/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-500 to-[#CCFF00] opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">{t('totalInstructors') || "TỔNG HLV"}</p>
+                      <p className="text-2xl font-black text-white mt-1 font-mono tracking-tight group-hover:text-[#CCFF00] transition-colors">{trainers.length}</p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-blue-400 group-hover:scale-110 transition-transform">
+                      <Dumbbell className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-2 italic font-medium">Đội ngũ có hồ sơ hoạt động</p>
+                </div>
+
+                {/* Active Clients */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-[#CCFF00]/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-purple-500 to-pink-500 opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">HỘI VIÊN TIỂU BIỂU</p>
+                      <p className="text-2xl font-black text-white mt-1 font-mono tracking-tight group-hover:text-[#CCFF00] transition-colors">
+                        {ptStats.reduce((sum, s) => sum + s.activeClients, 0)}
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-purple-400 group-hover:scale-110 transition-transform">
+                      <Users className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-2 italic font-medium">Đang trong hợp đồng đào tạo</p>
+                </div>
+
+                {/* Gross Revenue */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-[#CCFF00]/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-[#CCFF00] to-emerald-500 opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">DOANH THU KHÓA TẬP</p>
+                      <p className="text-xl font-black text-[#CCFF00] mt-1 font-mono tracking-tight">
+                        {ptStats.reduce((sum, s) => sum + s.totalRevenue, 0).toLocaleString()}đ
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-[#CCFF00] group-hover:scale-110 transition-transform">
+                      <TrendingUp className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-emerald-500 mt-2 italic font-bold">Tổng doanh thu PT đạt được</p>
+                </div>
+
+                {/* Total Paid / Commission */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-[#CCFF00]/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-teal-400 to-[#CCFF00] opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">HOA HỒNG PHẢI TRẢ</p>
+                      <p className="text-xl font-black text-teal-400 mt-1 font-mono tracking-tight">
+                        {ptStats.reduce((sum, s) => sum + s.commission, 0).toLocaleString()}đ
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-teal-400 group-hover:scale-110 transition-transform">
+                      <DollarSign className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-teal-400 mt-2 italic font-medium">Theo tỉ lệ trích xuất cá nhân</p>
+                </div>
+              </div>
+
+              {/* Advanced Interactive Level Segments (All, Master, Senior, Junior) */}
+              <div className="flex items-center gap-1.5 p-1 bg-zinc-950/80 border border-white/10 rounded-2xl overflow-x-auto custom-scrollbar shrink-0">
+                {[
+                  { id: "ALL", label: "Tất cả huấn luyện viên", count: trainers.length },
+                  { id: "MASTER", label: "Master Coach", count: trainers.filter(t => t.level === "Master").length },
+                  { id: "SENIOR", label: "Senior Coach", count: trainers.filter(t => t.level === "Senior").length },
+                  { id: "JUNIOR", label: "Junior Coach", count: trainers.filter(t => t.level === "Junior").length },
+                ].map((tier) => (
+                  <button
+                    key={tier.id}
+                    onClick={() => setPtLevelFilter(tier.id)}
+                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-2 whitespace-nowrap active:scale-95 ${
+                      ptLevelFilter === tier.id
+                        ? "bg-[#CCFF00] text-black shadow-[0_4px_20px_rgba(204,255,0,0.25)]"
+                        : "text-zinc-400 hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    {ptLevelFilter === tier.id && <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />}
+                    <span>{tier.label}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-black ${
+                      ptLevelFilter === tier.id ? "bg-black/10 text-black" : "bg-white/5 text-zinc-500"
+                    }`}>
+                      {tier.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
               {/* Responsive layout of unified, spacious, detailed PT profile cards */}
-              <div className="flex-1 overflow-y-auto pr-1 pb-10 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto pr-1 pb-80 custom-scrollbar">
                 {(() => {
-                  const filteredTrainers = trainers.filter(trainer => 
-                    trainer.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    trainer.phone.includes(searchTerm) ||
-                    (trainer.username && trainer.username.toLowerCase().includes(searchTerm.toLowerCase()))
-                  );
+                  const filteredTrainers = trainers.filter(trainer => {
+                    const matchesSearch = trainer.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                      trainer.phone.includes(searchTerm) ||
+                      (trainer.username && trainer.username.toLowerCase().includes(searchTerm.toLowerCase()));
+                    
+                    if (ptLevelFilter === "ALL") return matchesSearch;
+                    return matchesSearch && trainer.level?.toUpperCase() === ptLevelFilter.toUpperCase();
+                  });
 
                   if (filteredTrainers.length === 0) {
                     return (
@@ -5073,7 +5608,8 @@ export default function App() {
                   }
 
                   return (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 p-1">
+                    <>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 p-1">
                       {filteredTrainers.map(trainer => {
                         const stat = ptStats.find(s => s.trainerId === trainer.id) || {
                           trainerId: trainer.id,
@@ -5091,269 +5627,485 @@ export default function App() {
                         const totalSessionsLeft = trainerAssignments.reduce((sum, a) => sum + (a.sessionsLeft || 0), 0);
                         const totalSessionsTaught = totalRegisteredSessions - totalSessionsLeft;
 
+                        const taughtPercent = totalRegisteredSessions > 0 
+                          ? (totalSessionsTaught / totalRegisteredSessions) * 100 
+                          : 0;
+
                         return (
                           <div 
                             key={trainer.id} 
-                            className="bg-zinc-950 border border-white/10 hover:border-[#CCFF00]/40 p-8 rounded-[2.5rem] relative overflow-hidden group hover:shadow-[0_20px_50px_rgba(0,0,0,0.6)] hover:shadow-[#CCFF00]/5 transition-all duration-300 flex flex-col justify-between"
+                            style={{ contentVisibility: "auto" }}
+                            className="bg-zinc-950 border border-white/10 hover:border-[#CCFF00]/50 p-5 rounded-[2rem] relative overflow-hidden group hover:shadow-[0_20px_50px_rgba(0,0,0,0.8)] hover:shadow-[#CCFF00]/5 transition-all duration-300 flex flex-col justify-between min-h-[350px] shadow-2xl animate-fadeIn"
                           >
-                            {/* Ambient background accent light */}
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-[#CCFF00]/[0.01] rounded-full blur-3xl group-hover:bg-[#CCFF00]/[0.04] transition-all duration-500 pointer-events-none" />
-                            
-                            <div className="space-y-6">
-                              {/* Header Row */}
-                              <div className="flex justify-between items-start gap-4">
+                            {/* Ambient background glowing mesh (Premium design effect) */}
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-[#CCFF00]/[0.02] rounded-full blur-[40px] group-hover:bg-[#CCFF00]/[0.06] transition-all duration-500 pointer-events-none" />
+                            <div className="absolute -bottom-10 -left-10 w-24 h-24 bg-blue-500/[0.01] rounded-full blur-[30px] group-hover:bg-blue-500/[0.04] transition-all duration-500 pointer-events-none" />
+
+                            <div className="space-y-4">
+                              {/* Header Section: Avatar, Name, Level, Badges */}
+                              <div className="flex items-center gap-3.5 pb-3.5 border-b border-white/5 relative z-10">
+                                {/* Initial Avatar Badge with custom background ring */}
+                                <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-white/15 flex items-center justify-center font-mono font-black italic text-[#CCFF00] uppercase tracking-tighter shadow-xl text-lg relative shrink-0 group-hover:scale-105 transition-all duration-300">
+                                  {trainer.fullName.split(" ").pop()?.substring(0, 2) || "PT"}
+                                  {/* Online / Active status pulse */}
+                                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-zinc-950 animate-pulse" />
+                                </div>
+
                                 <div className="flex-1 min-w-0">
-                                  <span className={`inline-block text-[9px] font-black px-2.5 py-1 rounded-md uppercase tracking-wider mb-2.5 ${
-                                    trainer.level === 'Master' 
-                                      ? 'bg-[#CCFF00] text-black font-extrabold' 
-                                      : 'bg-white/5 text-zinc-400 border border-white/10'
-                                  }`}>
-                                    {trainer.level} PT
-                                  </span>
-                                  <h3 className="text-2xl font-black italic uppercase text-white group-hover:text-[#CCFF00] tracking-tight leading-7 transition-colors duration-300 truncate" title={trainer.fullName}>
+                                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                    <span className={`inline-block text-[8px] font-black px-1.5 py-0.5 rounded-lg uppercase tracking-widest ${
+                                      trainer.level === 'Master' 
+                                        ? 'bg-[#CCFF00] text-black font-extrabold' 
+                                        : 'bg-white/5 text-zinc-300 border border-white/10'
+                                    }`}>
+                                      {trainer.level} PT
+                                    </span>
+                                    <span className="text-[7.5px] font-mono text-zinc-400 bg-white/5 border border-white/5 px-1 rounded">
+                                      ID: {trainer.id.toString()}
+                                    </span>
+                                  </div>
+                                  <h3 className="text-base font-black italic uppercase text-white group-hover:text-[#CCFF00] tracking-tight leading-none transition-colors duration-200 truncate" title={trainer.fullName}>
                                     {trainer.fullName}
                                   </h3>
-                                  <p className="text-xs font-mono font-bold text-zinc-500 mt-1 uppercase tracking-wider">{trainer.phone}</p>
+                                  <p className="text-[10px] font-mono font-bold text-zinc-500 mt-1 uppercase tracking-wider flex items-center gap-1">
+                                    <Phone className="w-2.5 h-2.5 text-zinc-600" /> {trainer.phone}
+                                  </p>
                                 </div>
-                                
-                                {/* Quick actions panel */}
-                                <div className="shrink-0 flex gap-1 bg-zinc-900/60 p-1.5 rounded-2xl border border-white/5">
+
+                                {/* Clean round floating actions cabinet */}
+                                <div className="shrink-0 flex gap-1 bg-zinc-900/80 p-1.5 rounded-xl border border-white/5">
                                   <button 
                                     onClick={() => handleViewPTDetails(trainer)}
-                                    title="Xem chi tiết"
-                                    className="p-2.5 text-zinc-400 hover:text-blue-400 rounded-xl hover:bg-zinc-850 transition-all active:scale-95"
+                                    title="Xem hồ sơ chi tiết"
+                                    className="p-1.5 text-zinc-400 hover:text-blue-400 rounded-lg hover:bg-white/5 transition-all active:scale-90"
                                   >
-                                    <Eye className="w-4 h-4" />
+                                    <Eye className="w-3.5 h-3.5" />
                                   </button>
                                   <button 
                                     onClick={() => handleEditPT(trainer)}
                                     title="Chỉnh sửa thông tin"
-                                    className="p-2.5 text-zinc-400 hover:text-[#CCFF00] rounded-xl hover:bg-zinc-850 transition-all active:scale-95"
+                                    className="p-1.5 text-zinc-400 hover:text-[#CCFF00] rounded-lg hover:bg-white/5 transition-all active:scale-90"
                                   >
-                                    <Edit2 className="w-4 h-4" />
+                                    <Edit2 className="w-3.5 h-3.5" />
                                   </button>
                                   <button 
                                     onClick={() => handleDeletePT(trainer.id)}
-                                    title="Xóa huấn luyện viên"
-                                    className="p-2.5 text-zinc-400 hover:text-red-500 rounded-xl hover:bg-zinc-850 transition-all active:scale-95"
+                                    title="Hủy hợp đồng huấn luyện viên"
+                                    className="p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-white/5 transition-all active:scale-90"
                                   >
-                                    <Trash2 className="w-4 h-4" />
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
                               </div>
 
-                              {/* Account Access Details */}
-                              <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 shadow-inner">
-                                <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                                  <Lock className="w-3.5 h-3.5 text-[#CCFF00]" /> TÀI KHOẢN ĐĂNG NHẬP
+                              {/* Specialized Expertise Pills */}
+                              <div>
+                                <p className="text-[8px] font-black font-mono text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                                  <Trophy className="w-2.5 h-2.5 text-[#CCFF00]" /> CHUYÊN MÔN KỸ THUẬT
                                 </p>
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <span className="text-[9px] text-zinc-500 block uppercase tracking-wider mb-1.5">Tên đăng nhập</span>
-                                    <span className="text-xs font-mono font-bold text-zinc-300 bg-zinc-900/80 px-3 py-1.5 rounded-lg border border-white/5 block truncate">
-                                      {trainer.username || 'Chưa thiết lập'}
-                                    </span>
+                                <div className="flex flex-wrap gap-1">
+                                  {trainer.expertise && trainer.expertise.length > 0 ? (
+                                    trainer.expertise.map((exp, i) => (
+                                      <span key={i} className="text-[9px] font-black bg-white/[0.02] border border-white/5 text-zinc-300 px-2 py-0.5 rounded-lg uppercase italic flex items-center gap-1">
+                                        <span className="w-1 h-1 rounded-full bg-[#CCFF00]" /> {exp}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="text-[9px] text-zinc-500 uppercase italic">Đang cập nhật chứng chỉ thế giới</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Performance Progress visualization (Global standards metrics) */}
+                              <div className="bg-white/[0.01] border border-white/5 rounded-2xl p-3 space-y-2">
+                                <div className="flex justify-between items-center text-[9px] font-black font-mono tracking-wider uppercase text-zinc-500">
+                                  <span>TIẾN ĐỘ THỰC HIỆN BUỔI DẠY</span>
+                                  <span className="text-white font-extrabold">{taughtPercent.toFixed(0)}%</span>
+                                </div>
+                                {/* Bar representation */}
+                                <div className="w-full bg-zinc-900/90 h-2 rounded-full overflow-hidden border border-white/5 relative">
+                                  <div 
+                                    className="h-full bg-gradient-to-r from-teal-500 to-[#CCFF00] rounded-full transition-all duration-500"
+                                    style={{ width: `${Math.min(taughtPercent, 100)}%` }}
+                                  />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-center">
+                                  <div className="bg-zinc-950 p-1.5 rounded-lg border border-white/5">
+                                    <span className="text-[7.5px] text-zinc-500 uppercase tracking-wider block">ĐĂNG KÝ (HĐ)</span>
+                                    <span className="text-[11px] font-mono font-black text-zinc-300">{totalRegisteredSessions} buổi</span>
                                   </div>
-                                  <div>
-                                    <div className="flex justify-between items-center mb-1.5">
-                                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider">Mật khẩu</span>
-                                      <button 
-                                        onClick={() => setVisiblePasswords(prev => ({...prev, [`p-${trainer.id}`]: !prev[`p-${trainer.id}`]}))}
-                                        className="text-[9px] font-black text-[#CCFF00] uppercase hover:underline"
-                                      >
-                                        {isPassVisible ? "Ẩn" : "Hiện"}
-                                      </button>
-                                    </div>
-                                    <span className="text-xs font-mono font-bold text-zinc-300 bg-zinc-900/80 px-3 py-1.5 rounded-lg border border-white/5 block overflow-hidden text-ellipsis whitespace-nowrap">
+                                  <div className="bg-zinc-950 p-1.5 rounded-lg border border-white/5">
+                                    <span className="text-[7.5px] text-zinc-500 uppercase tracking-wider block">CHƯA DẠY (CÒN)</span>
+                                    <span className="text-[11.5px] font-mono font-black text-[#CCFF00]">{totalSessionsLeft} buổi</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Secure Account login details drawers (Modern minimalist credentials drawer) */}
+                              <div className="bg-zinc-900/30 border border-white/5 rounded-2xl p-2.5">
+                                <div className="flex justify-between items-center mb-1.5">
+                                  <p className="text-[8px] font-black font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-1">
+                                    <Lock className="w-2.5 h-2.5 text-zinc-400" /> THÔNG TIN ĐĂNG NHẬP
+                                  </p>
+                                  <button 
+                                    onClick={() => setVisiblePasswords(prev => ({...prev, [`p-${trainer.id}`]: !prev[`p-${trainer.id}`]}))}
+                                    className="text-[8px] font-black text-[#CCFF00] uppercase hover:underline transition-all active:scale-95 px-1"
+                                  >
+                                    {isPassVisible ? "Ẩn bảo mật" : "Hiện mật khẩu"}
+                                  </button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                  <div className="bg-zinc-950/80 px-2.5 py-1 rounded-md border border-white/5 block truncate">
+                                    <span className="text-[7px] text-zinc-600 block uppercase font-black">USERNAME</span>
+                                    <span className="font-mono text-zinc-400 font-bold block truncate">{trainer.username || 'Chưa thiết lập'}</span>
+                                  </div>
+                                  <div className="bg-zinc-950/80 px-2.5 py-1 rounded-md border border-white/5 block truncate">
+                                    <span className="text-[7px] text-zinc-600 block uppercase font-black">PASSWORD</span>
+                                    <span className="font-mono text-zinc-400 font-bold block truncate">
                                       {isPassVisible ? (trainer.password || '123456') : '••••••••'}
                                     </span>
                                   </div>
                                 </div>
                               </div>
 
-                              {/* Fields of expertise */}
-                              <div>
-                                <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest mb-2.5">LĨNH VỰC CHUYÊN MÔN</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {trainer.expertise && trainer.expertise.length > 0 ? (
-                                    trainer.expertise.map((exp, i) => (
-                                      <span key={i} className="text-[10px] font-black bg-zinc-900/80 border border-white/5 text-zinc-400 px-3 py-1.5 rounded-lg uppercase italic">
-                                        {exp}
-                                      </span>
-                                    ))
-                                  ) : (
-                                    <span className="text-[10px] text-zinc-600 uppercase italic">Chưa xác định</span>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Realtime Stats / Metrics summary */}
-                              <div className="space-y-3.5 border-t border-b border-white/5 py-5 text-xs font-mono uppercase italic">
+                              {/* Nested Dynamic Stats Grid */}
+                              <div className="border-t border-white/5 pt-3 mt-1 space-y-1.5 text-[10px] font-mono tracking-wider">
                                 <div className="flex justify-between items-center">
-                                  <span className="text-zinc-500 tracking-wider">HỘI VIÊN ĐANG THEO</span>
-                                  <span className="text-white font-black text-sm">{stat.activeClients}</span>
+                                  <span className="text-zinc-500 uppercase italic">Hội viên trực tiếp</span>
+                                  <span className="text-white font-black">{stat.activeClients} người dùng</span>
                                 </div>
                                 <div className="flex justify-between items-center">
-                                  <span className="text-zinc-500 tracking-wider font-semibold">DOANH THU PT</span>
-                                  <span className="text-white font-black text-sm">{stat.totalRevenue.toLocaleString()}đ</span>
+                                  <span className="text-zinc-500 uppercase italic">Tổng số buổi đã dạy thực tế</span>
+                                  <span className="text-white font-black">{stat.sessionsTotal} buổi</span>
                                 </div>
-                                <div className="flex justify-between items-center bg-[#CCFF00]/5 p-2 rounded-lg border border-[#CCFF00]/10">
-                                  <span className="text-[#CCFF00] tracking-wider">CÁC CHỈ SỐ BUỔI TẬP:</span>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-zinc-500 uppercase italic">Doanh thu đóng góp</span>
+                                  <span className="text-white font-black text-rose-400">{stat.totalRevenue.toLocaleString()}đ</span>
                                 </div>
-                                <div className="flex justify-between items-center pl-2">
-                                  <span className="text-zinc-500 tracking-wider">TỔNG BUỔI ĐĂNG KÝ (HỢP ĐỒNG)</span>
-                                  <span className="text-white font-black text-sm">{totalRegisteredSessions} buổi</span>
-                                </div>
-                                <div className="flex justify-between items-center pl-2">
-                                  <span className="text-zinc-400 tracking-wider">SỐ BUỔI ĐẠY THỰC TẾ</span>
-                                  <span className="text-[#CCFF00] font-black text-sm">{stat.sessionsTotal} buổi</span>
-                                </div>
-                                <div className="flex justify-between items-center pl-2">
-                                  <span className="text-zinc-500 tracking-wider">ĐÃ TRỪ BUỔI TRÊN HỆ THỐNG</span>
-                                  <span className="text-white font-black text-sm">{totalSessionsTaught} buổi</span>
-                                </div>
-                                <div className="flex justify-between items-center pl-2">
-                                  <span className="text-zinc-500 tracking-wider">CHƯA DẠY (CÒN LẠI)</span>
-                                  <span className="text-white font-black text-sm">{totalSessionsLeft} buổi</span>
-                                </div>
-                                <div className="flex justify-between items-center border-t border-white/5 pt-3.5 mt-3.5">
-                                  <span className="text-zinc-500 tracking-wider">HOA HỒNG PT ({(trainer.commissionRate * 100).toFixed(0)}%)</span>
-                                  <span className="text-[#CCFF00] font-black text-sm">{stat.commission.toLocaleString()}đ</span>
+                                <div className="flex justify-between items-center bg-[#CCFF00]/5 p-2 rounded-xl border border-[#CCFF00]/10 text-[9px] mt-1 font-semibold">
+                                  <span className="text-[#CCFF00] uppercase italic">HOA HỒNG PHÁT SINH ({(trainer.commissionRate * 100).toFixed(0)}%)</span>
+                                  <span className="text-white font-black text-xs">{stat.commission.toLocaleString()}đ</span>
                                 </div>
                               </div>
                             </div>
 
-                            {/* Assign Member CTA Button */}
+                            {/* Full width Action recruitment slider CTA */}
                             <button
                               onClick={() => openPTAssignModal(trainer.id)}
-                              className="w-full py-4 bg-[#CCFF00]/10 text-[#CCFF00] border border-[#CCFF00]/20 hover:bg-[#CCFF00] hover:text-black transition-all hover:scale-[1.01] text-xs font-black uppercase tracking-widest active:scale-[0.98] duration-200 rounded-2xl flex items-center justify-center gap-2 mt-6 shadow-md"
+                              className="w-full py-3 bg-[#CCFF00] hover:bg-[#b5e000] text-black transition-all hover:scale-[1.02] active:scale-[0.98] duration-200 rounded-2xl flex items-center justify-center gap-2 mt-4 shadow-[0_4px_25px_rgba(204,255,0,0.15)] font-black text-xs uppercase tracking-widest relative z-10"
                             >
-                              <Users className="w-4 h-4" /> GÁN HỘI VIÊN MỚI
+                              <UserPlusIcon className="w-4 h-4 shrink-0" /> GÁN HỘI VIÊN TIẾP CHỈ TIÊU
                             </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Dedicated scroll-space extension to allow pulling and scrolling drag extremely deep */}
+                    <div className="h-64 sm:h-96 w-full pointer-events-none" />
+                  </>
+                );
+                })()}
+              </div>
+            </div>
+          ) : activeTab === "staff" ? (
+            <div className="space-y-8 pb-4 h-full flex flex-col overflow-hidden relative z-10 px-5 md:px-0 animate-fadeIn">
+              {/* Dynamic KPI Metrics Grid (World-class standard) */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+                {/* Total Payroll */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-[#CCFF00]/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-red-500 to-[#CCFF00] opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">{t('totalPay')}</p>
+                      <p className="text-xl md:text-2xl font-black text-[#CCFF00] mt-1 font-mono tracking-tight group-hover:scale-105 transition-transform origin-left">
+                        {payroll.reduce((sum, p) => sum + p.totalPay, 0).toLocaleString()}đ
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-[#CCFF00] group-hover:scale-110 transition-transform">
+                      <Wallet className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-2 italic font-medium">Chi phí nhân sự tháng này</p>
+                </div>
+
+                {/* Attendance today */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-[#CCFF00]/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-emerald-500 to-[#CCFF00] opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">{t('attendance')}</p>
+                      <p className="text-2xl font-black text-white mt-1 font-mono tracking-tight">
+                        {attendance.filter(a => a.date === new Date().toISOString().split('T')[0] && !a.checkOut).length} / {staffMembers.length}
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-emerald-400 group-hover:scale-110 transition-transform">
+                      <Activity className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-2 italic font-medium">Nhân viên hiện có mặt trực ca</p>
+                </div>
+
+                {/* Total staff */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-[#CCFF00]/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-500 to-[#CCFF00] opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">TỔNG NHÂN SỰ</p>
+                      <p className="text-2xl font-black text-blue-400 mt-1 font-mono tracking-tight">
+                        {staffMembers.length}
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-blue-400 group-hover:scale-110 transition-transform">
+                      <UserIcon className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-2 italic font-medium">Đội ngũ vận hành phòng máy</p>
+                </div>
+
+                {/* Work shift distribution */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-[#CCFF00]/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-purple-500 to-[#CCFF00] opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">ĐÃ HOÀN THÀNH CA</p>
+                      <p className="text-2xl font-black text-purple-400 mt-1 font-mono tracking-tight">
+                        {attendance.filter(a => a.date === new Date().toISOString().split('T')[0] && !!a.checkOut).length}
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-purple-400 group-hover:scale-110 transition-transform">
+                      <Trophy className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-2 italic font-medium">Lượt trực hoàn tất hôm nay</p>
+                </div>
+              </div>
+
+              {/* Segment Filters for Staff */}
+              <div className="flex items-center gap-1.5 p-1 bg-zinc-950/80 border border-white/10 rounded-2xl overflow-x-auto custom-scrollbar shrink-0">
+                {[
+                  { id: "ALL", label: "Tất cả nhân sự", count: staffMembers.length },
+                  { id: "PRESENT", label: "Đang làm việc", count: staffMembers.filter(s => {
+                    const l = attendance.find(a => a.staffId === s.id && a.date === new Date().toISOString().split('T')[0]);
+                    return !!l && !l.checkOut;
+                  }).length },
+                  { id: "DONE", label: "Đã hoàn thành ca", count: staffMembers.filter(s => {
+                    const l = attendance.find(a => a.staffId === s.id && a.date === new Date().toISOString().split('T')[0]);
+                    return !!l && !!l.checkOut;
+                  }).length },
+                  { id: "OFF", label: "Nghỉ ca / Off", count: staffMembers.filter(s => {
+                    const l = attendance.find(a => a.staffId === s.id && a.date === new Date().toISOString().split('T')[0]);
+                    return !l;
+                  }).length },
+                ].map((tier) => (
+                  <button
+                    key={tier.id}
+                    onClick={() => setStaffStatusFilter(tier.id)}
+                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-2 whitespace-nowrap active:scale-95 ${
+                      staffStatusFilter === tier.id
+                        ? "bg-[#CCFF00] text-black shadow-[0_4px_20px_rgba(204,255,0,0.25)]"
+                        : "text-zinc-400 hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    {staffStatusFilter === tier.id && <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />}
+                    <span>{tier.label}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-black ${
+                      staffStatusFilter === tier.id ? "bg-black/10 text-black" : "bg-white/5 text-zinc-500"
+                    }`}>
+                      {tier.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Staff Extended Data Cards Board */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
+                {(() => {
+                  const filteredStaff = staffMembers.filter(staff => {
+                    const matchesSearch = staff.fullName.toLowerCase().includes(searchTerm.toLowerCase());
+                    const todayLog = attendance.find(a => a.staffId === staff.id && a.date === new Date().toISOString().split('T')[0]);
+                    if (staffStatusFilter === "ALL") return matchesSearch;
+                    if (staffStatusFilter === "PRESENT") return matchesSearch && !!todayLog && !todayLog.checkOut;
+                    if (staffStatusFilter === "DONE") return matchesSearch && !!todayLog && !!todayLog.checkOut;
+                    if (staffStatusFilter === "OFF") return matchesSearch && !todayLog;
+                    return matchesSearch;
+                  });
+
+                  if (filteredStaff.length === 0) {
+                    return (
+                      <div className="py-24 text-center bg-zinc-950/40 rounded-[2.5rem] border border-white/5 border-dashed flex flex-col items-center justify-center">
+                        <UserIcon className="w-12 h-12 text-zinc-650 mb-4" />
+                        <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-[0.4em]">
+                          KHÔNG TÌM THẤY NHÂN VIÊN PHÙ HỢP
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 gap-4">
+                      {filteredStaff.map(staff => {
+                        const todayLog = attendance.find(a => a.staffId === staff.id && a.date === new Date().toISOString().split('T')[0]);
+                        const isPassVisible = visiblePasswords[`s-${staff.id}`];
+                        return (
+                          <div 
+                            key={staff.id} 
+                            className="bg-zinc-950/40 border border-white/15 hover:border-[#CCFF00]/40 p-2.5 md:p-3 rounded-xl transition-all duration-300 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 relative overflow-hidden group shadow-md"
+                          >
+                            {/* Accent status edge banner */}
+                            <div className={`absolute top-0 left-0 h-full w-1 transition-all ${todayLog ? (todayLog.checkOut ? 'bg-zinc-750' : 'bg-[#CCFF00]') : 'bg-rose-500'}`} />
+
+                            {/* Section 1: Avatar & Basic Information */}
+                            <div className="flex items-center gap-2.5 min-w-[200px] pl-2">
+                              <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-white/10 flex items-center justify-center font-black text-xs text-[#CCFF00] group-hover:rotate-6 transition-all shadow-inner relative shrink-0">
+                                {staff.fullName.split(" ").pop()?.charAt(0)}
+                                <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-zinc-950 ${todayLog ? (todayLog.checkOut ? 'bg-zinc-500' : 'bg-[#CCFF00] animate-pulse') : 'bg-rose-500'}`} />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <h4 className="font-extrabold text-xs text-white uppercase italic tracking-tighter group-hover:text-[#CCFF00] transition-colors">
+                                    {staff.fullName}
+                                  </h4>
+                                  <span className="text-[7px] font-semibold font-mono bg-white/5 border border-white/10 text-zinc-400 px-1 py-0.5 rounded">
+                                    #{staff.id}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                                  <span className="text-[7-px] text-[7.5px] font-black uppercase tracking-wider text-[#CCFF00] bg-[#CCFF00]/10 border border-[#CCFF00]/20 px-1.5 py-0.2 rounded">
+                                    {staff.position}
+                                  </span>
+                                  <span className="text-[7.5px] font-black font-mono text-zinc-500 uppercase tracking-wider bg-zinc-950 px-1 py-0.2 rounded border border-white/5">
+                                    {staff.role}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Section 2: Account Security Credentials */}
+                            <div className="grid grid-cols-2 items-center gap-2.5 bg-zinc-950/80 p-2 rounded-lg border border-white/5 min-w-[240px] lg:flex-1">
+                              <div>
+                                <span className="text-[7.5px] font-mono text-zinc-500 uppercase tracking-widest block mb-0.5">TÀI KHOẢN</span>
+                                <div className="flex items-center gap-1 text-zinc-350 font-bold italic tracking-tight text-[11px]">
+                                  <UserIcon className="w-3 h-3 text-[#CCFF00]/70 shrink-0" />
+                                  <span className="font-semibold text-white truncate max-w-[90px]">{staff.username || 'Chưa đặt'}</span>
+                                </div>
+                              </div>
+                              <div>
+                                <span className="text-[7.5px] font-mono text-zinc-500 uppercase tracking-widest block mb-0.5">MẬT KHẨU</span>
+                                <div className="flex items-center gap-1">
+                                  <Lock className="w-3 h-3 text-zinc-500 shrink-0" />
+                                  <span className="font-mono text-zinc-300 font-bold tracking-tight text-[11px] truncate">
+                                    {isPassVisible ? (staff.password || '123456') : '••••••••'}
+                                  </span>
+                                  <button 
+                                    onClick={() => setVisiblePasswords(prev => ({...prev, [`s-${staff.id}`]: !prev[`s-${staff.id}`]}))}
+                                    className="ml-0.5 text-zinc-500 hover:text-[#CCFF00] transition-colors p-0.5 bg-white/5 rounded border border-white/5"
+                                  >
+                                    {isPassVisible ? <EyeOff className="w-2.5 h-2.5" /> : <Eye className="w-2.5 h-2.5" />}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Section 3: Contact & Financial Salary info */}
+                            <div className="grid grid-cols-2 gap-2 min-w-[220px] lg:flex-1">
+                              <div className="space-y-0.5">
+                                <span className="text-[7.5px] font-mono text-zinc-500 uppercase tracking-widest block">LIÊN HỆ</span>
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-1 text-[10px] text-zinc-400">
+                                    <Phone className="w-2.5 h-2.5 text-[#CCFF00]/60 shrink-0" />
+                                    <span className="font-semibold">{staff.phoneNumber || 'Không có sđt'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1 text-[10px] text-zinc-400 truncate max-w-[120px]">
+                                    <Mail className="w-2.5 h-2.5 text-blue-400/60 shrink-0" />
+                                    <span className="font-semibold truncate">{staff.email || 'Không có email'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="space-y-0.5">
+                                <span className="text-[7.5px] font-mono text-zinc-500 uppercase tracking-widest block">LƯƠNG & ĐÃI NGỘ</span>
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-1 text-[10px] text-zinc-400">
+                                    <DollarSign className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                                    <p className="font-semibold text-zinc-300">
+                                      CB: <span className="text-white font-extrabold">{(staff.baseSalary || 0).toLocaleString()}đ</span>
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1 text-[10px] text-zinc-400">
+                                    <Activity className="w-2.5 h-2.5 text-[#CCFF00]/70 shrink-0" />
+                                    <p className="font-semibold text-zinc-300">
+                                      Giờ: <span className="text-[#CCFF00] font-extrabold">{(staff.hourlyRate || 0).toLocaleString()}đ</span>
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Section 4: Live Shift Attendance Controls */}
+                            <div className="flex flex-row lg:flex-col items-center lg:items-end justify-between lg:justify-center gap-2 border-t lg:border-t-0 border-white/5 pt-2.5 lg:pt-0 min-w-[180px]">
+                              <div className="text-left lg:text-right">
+                                <span className="text-[7.5px] font-mono text-zinc-500 uppercase tracking-widest block mb-0.5">CA TRỰC & TRẠNG THÁI</span>
+                                <div className="flex items-center gap-1.5">
+                                  <div className="inline-flex items-center gap-1 text-[9px] font-bold font-mono text-zinc-300 bg-zinc-950 px-1.5 py-0.5 rounded border border-white/5">
+                                    <ClockIcon className="w-2.5 h-2.5 text-purple-400" />
+                                    <span>{staff.shiftHours.start}-{staff.shiftHours.end}</span>
+                                  </div>
+                                  {todayLog ? (
+                                    <span className={`text-[7.5px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${todayLog.checkOut ? 'bg-zinc-950 text-zinc-500 border border-white/5' : 'bg-[#CCFF00]/15 text-[#CCFF00] border border-[#CCFF00]/30 animate-pulse'}`}>
+                                      {todayLog.checkOut ? "XONG" : "ĐANG CA"}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[7.5px] font-black px-1.5 py-0.5 rounded uppercase bg-rose-500/10 text-rose-500 border border-rose-500/20">OFF</span>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-1.5">
+                                {!todayLog ? (
+                                  <button
+                                    onClick={() => handleStaffAttendance(staff.id, "checkin")}
+                                    className="px-2 py-1 bg-[#CCFF00] hover:bg-white text-black font-black text-[8px] uppercase tracking-wider rounded transition-all shadow-md active:scale-95 flex items-center gap-1"
+                                  >
+                                    <CheckCircle2 className="w-2.5 h-2.5" /> CHECK-IN
+                                  </button>
+                                ) : !todayLog.checkOut ? (
+                                  <button
+                                    onClick={() => handleStaffAttendance(staff.id, "checkout")}
+                                    className="px-2 py-1 bg-rose-500 hover:bg-rose-600 text-white font-black text-[8px] uppercase tracking-wider rounded transition-all shadow-md active:scale-95 flex items-center gap-1"
+                                  >
+                                    <LogOut className="w-2.5 h-2.5" /> CHECK-OUT
+                                  </button>
+                                ) : (
+                                  <div className="px-1.5 py-0.5 bg-zinc-900 border border-white/5 rounded text-[8px] font-mono font-black text-zinc-500 uppercase tracking-widest text-center">
+                                    XONG ({todayLog.totalHours}H)
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Section 5: Direct Action Controls */}
+                            <div className="flex flex-row lg:flex-col items-center gap-1 self-stretch lg:justify-center border-t lg:border-t-0 border-white/5 pt-2 lg:pt-0">
+                              <button 
+                                onClick={() => handleEditStaff(staff)}
+                                className="flex-1 lg:flex-none p-1.5 bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded border border-white/5 transition-all active:scale-90 flex items-center justify-center gap-1 text-[8.5px] font-bold uppercase tracking-wider min-w-[55px]"
+                                title="Sửa nhân viên"
+                              >
+                                <Edit2 className="w-2.5 h-2.5 text-[#CCFF00]" /> <span className="lg:hidden">Sửa</span>
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteStaff(staff.id)}
+                                className="flex-1 lg:flex-none p-1.5 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded border border-rose-500/20 transition-all active:scale-90 flex items-center justify-center gap-1 text-[8.5px] font-bold uppercase tracking-wider min-w-[55px]"
+                                title="Xóa nhân viên"
+                              >
+                                <Trash2 className="w-2.5 h-2.5" /> <span className="lg:hidden">Xóa</span>
+                              </button>
+                            </div>
+
                           </div>
                         );
                       })}
                     </div>
                   );
                 })()}
-              </div>
-            </div>
-          ) : activeTab === "staff" ? (
-            <div className="space-y-6 pb-0 h-full flex flex-col overflow-hidden relative z-10">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 shrink-0 px-5 md:px-0">
-                <div className="bg-zinc-950 border border-white/10 p-6 rounded-[2.5rem] shadow-2xl">
-                  <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1">{t('totalPay')}</p>
-                  <p className="text-2xl font-black text-[#CCFF00] tracking-tighter">
-                    {payroll.reduce((sum, p) => sum + p.totalPay, 0).toLocaleString()}đ
-                  </p>
-                </div>
-                <div className="bg-zinc-950 border border-white/10 p-6 rounded-[2.5rem] shadow-2xl">
-                  <p className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-1">{t('attendance')}</p>
-                  <p className="text-2xl font-black text-white tracking-tighter">
-                    {attendance.filter(a => a.date === new Date().toISOString().split('T')[0]).length} / {staffMembers.length}
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-zinc-900 border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl flex-1 flex flex-col mx-5 md:mx-0">
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
-                  <table className="w-full text-left bg-zinc-950">
-                    <thead className="sticky top-0 bg-zinc-950 z-10">
-                      <tr className="text-sm font-black font-mono text-zinc-400 uppercase border-b border-white/5">
-                        <th className="px-8 py-5 tracking-[0.2em]">{t('fullName')}</th>
-                        <th className="px-8 py-5 tracking-[0.2em]">TÀI KHOẢN</th>
-                        <th className="px-8 py-5 tracking-[0.2em]">MẬT KHẨU</th>
-                        <th className="px-8 py-5 tracking-[0.2em]">{t('positions')}</th>
-                        <th className="px-8 py-5 tracking-[0.2em]">{t('shifts')}</th>
-                        <th className="px-8 py-5 tracking-[0.2em]">{t('staffStatus')}</th>
-                        <th className="px-8 py-5 text-right">{t('attendance')}</th>
-                        <th className="px-8 py-5 text-right">THAO TÁC</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {staffMembers.map(staff => {
-                        const todayLog = attendance.find(a => a.staffId === staff.id && a.date === new Date().toISOString().split('T')[0]);
-                        return (
-                          <tr key={staff.id} className="hover:bg-white/[0.02] transition-colors">
-                             <td className="px-8 py-5">
-                              <div className="font-black text-white uppercase italic tracking-tight text-base">{staff.fullName}</div>
-                              <div className="text-xs font-black font-mono text-zinc-600">{staff.role}</div>
-                            </td>
-                            <td className="px-8 py-5 text-center">
-                              <span className="text-[10px] font-mono text-zinc-400">{staff.username || 'N/A'}</span>
-                            </td>
-                            <td className="px-8 py-5 text-center">
-                              <span className="text-[10px] font-mono text-zinc-400">
-                                {visiblePasswords[`s-${staff.id}`] ? (staff.password || '123456') : '••••••••'}
-                              </span>
-                            </td>
-                            <td className="px-8 py-5">
-                              <div className="text-xs text-zinc-400 uppercase font-black">{staff.position}</div>
-                            </td>
-                            <td className="px-8 py-5">
-                              <div className="flex items-center gap-2 text-xs font-black font-mono text-zinc-500">
-                                <ClockIcon className="w-3.5 h-3.5" />
-                                {staff.shiftHours.start} - {staff.shiftHours.end}
-                              </div>
-                            </td>
-                            <td className="px-8 py-5">
-                              {todayLog ? (
-                                <span className={`text-xs font-black px-2 py-1 rounded uppercase ${todayLog.checkOut ? 'bg-zinc-800 text-zinc-500' : 'bg-[#CCFF00]/20 text-[#CCFF00] animate-pulse'}`}>
-                                  {todayLog.checkOut ? t('checkOut') : t('staffStatus')}
-                                </span>
-                              ) : (
-                                <span className="text-xs font-black px-2 py-1 rounded uppercase bg-white/5 text-zinc-600">OFF</span>
-                              )}
-                            </td>
-                            <td className="px-8 py-5 text-right">
-                              {!todayLog ? (
-                                <button
-                                  onClick={() => handleStaffAttendance(staff.id, "checkin")}
-                                  className="px-4 py-2 bg-[#CCFF00]/10 text-[#CCFF00] border border-[#CCFF00]/30 rounded-xl text-[9px] font-black uppercase hover:bg-[#CCFF00] hover:text-black transition-all"
-                                >
-                                  CHECK-IN
-                                </button>
-                              ) : !todayLog.checkOut ? (
-                                <button
-                                  onClick={() => handleStaffAttendance(staff.id, "checkout")}
-                                  className="px-4 py-2 bg-red-500/10 text-red-500 border border-red-500/30 rounded-xl text-[9px] font-black uppercase hover:bg-red-500 hover:text-white transition-all"
-                                >
-                                  CHECK-OUT
-                                </button>
-                              ) : (
-                                <div className="text-[9px] font-mono text-zinc-600 uppercase">
-                                  {todayLog.totalHours}H DONE
-                                </div>
-                              )}
-                            </td>
-                            <td className="px-8 py-5 text-right">
-                              <div className="flex justify-end gap-2">
-                                <button 
-                                  onClick={() => setVisiblePasswords(prev => ({...prev, [`s-${staff.id}`]: !prev[`s-${staff.id}`]}))}
-                                  className="p-2.5 bg-zinc-900 text-zinc-500 hover:text-[#CCFF00] rounded-xl border border-white/10 transition-all hover:bg-zinc-800"
-                                >
-                                  {visiblePasswords[`s-${staff.id}`] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                </button>
-                                <button 
-                                  onClick={() => handleEditStaff(staff)}
-                                  className="p-2.5 bg-zinc-900 text-zinc-500 hover:text-[#CCFF00] rounded-xl border border-white/10 transition-all hover:bg-zinc-800"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </button>
-                                <button 
-                                  onClick={() => handleDeleteStaff(staff.id)}
-                                  className="p-2.5 bg-zinc-900 text-zinc-500 hover:text-red-500 rounded-xl border border-white/10 transition-all hover:bg-zinc-800"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
               </div>
             </div>
           ) : activeTab === "evaluations" ? (
@@ -5953,85 +6705,177 @@ export default function App() {
               </div>
             </motion.div>
           ) : activeTab === "treasury" ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-6 h-full flex flex-col overflow-hidden pb-2 px-0"
-            >
-              <div className="flex-1 overflow-hidden flex flex-col bg-zinc-950 border border-white/5 rounded-[2.5rem] shadow-2xl">
-                <div className="p-8 border-b border-white/5 bg-white/[0.01]">
-                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                      <div className="flex items-center gap-2">
-                         <div className="w-2 h-2 rounded-full bg-[#CCFF00] animate-pulse" />
-                         <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest leading-none">THU CHI // LIVE_VIEW</span>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full md:w-auto">
-                        <div className="bg-black/40 border border-white/5 px-6 py-4 rounded-2xl flex flex-col min-w-[180px]">
-                          <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest mb-1 italic border-l border-[#CCFF00] pl-2">TỔNG THU</p>
-                          <h4 className="text-xl font-black text-[#CCFF00] italic tracking-tighter">
-                            {transactions.filter(t => t.type === "INCOME").reduce((sum, t) => sum + t.amount, 0).toLocaleString()}đ
-                          </h4>
-                        </div>
-                        <div className="bg-black/40 border border-white/5 px-6 py-4 rounded-2xl flex flex-col min-w-[180px]">
-                          <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest mb-1 italic border-l border-red-500 pl-2">TỔNG CHI</p>
-                          <h4 className="text-xl font-black text-white italic tracking-tighter">
-                            {transactions.filter(t => t.type === "EXPENSE").reduce((sum, t) => sum + t.amount, 0).toLocaleString()}đ
-                          </h4>
-                        </div>
-                        <div className="bg-black/40 border border-white/5 px-6 py-4 rounded-2xl flex flex-col min-w-[180px]">
-                          <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest mb-1 italic border-l border-zinc-700 pl-2">DƯ QUỸ</p>
-                          <h4 className="text-xl font-black text-white italic tracking-tighter">
-                            {(transactions.filter(t => t.type === "INCOME").reduce((sum, t) => sum + t.amount, 0) - 
-                              transactions.filter(t => t.type === "EXPENSE").reduce((sum, t) => sum + t.amount, 0)).toLocaleString()}đ
-                          </h4>
-                        </div>
-                      </div>
-                   </div>
+            <div className="space-y-8 pb-32 h-full flex flex-col overflow-hidden relative z-10 px-5 md:px-0 animate-fadeIn">
+              {/* Dynamic KPI Metrics Grid (World-class standard) */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+                {/* Total Income */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-[#CCFF00]/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-emerald-500 to-[#CCFF00] opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">TỔNG THU (INCOME)</p>
+                      <p className="text-xl md:text-2xl font-black text-[#CCFF00] mt-1 font-mono tracking-tight group-hover:scale-105 transition-transform origin-left">
+                        {transactions.filter(t => t.type === "INCOME").reduce((sum, t) => sum + t.amount, 0).toLocaleString()}đ
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-[#CCFF00] group-hover:scale-110 transition-transform">
+                      <TrendingUp className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-2 italic font-medium">Tổng dòng tiền thu vào phòng máy</p>
                 </div>
+
+                {/* Total Expenses */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-red-500/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-red-500 to-rose-600 opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">TỔNG CHI (EXPENSES)</p>
+                      <p className="text-xl md:text-2xl font-black text-rose-400 mt-1 font-mono tracking-tight group-hover:scale-105 transition-transform origin-left">
+                        {transactions.filter(t => t.type === "EXPENSE").reduce((sum, t) => sum + t.amount, 0).toLocaleString()}đ
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-rose-400 group-hover:scale-110 transition-transform">
+                      <TrendingDown className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-2 italic font-medium">Dòng tiền chi vận hành & lương</p>
+                </div>
+
+                {/* Net Balance */}
+                {(() => {
+                  const balance = transactions.filter(t => t.type === "INCOME").reduce((sum, t) => sum + t.amount, 0) - 
+                                  transactions.filter(t => t.type === "EXPENSE").reduce((sum, t) => sum + t.amount, 0);
+                  const isPositive = balance >= 0;
+                  return (
+                    <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-white/20 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                      <div className={`absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r ${isPositive ? 'from-emerald-500 to-teal-400' : 'from-red-500 to-rose-600'} opacity-70 group-hover:opacity-100 transition-opacity`} />
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">THỰC DƯ QUỸ</p>
+                          <p className={`text-xl md:text-2xl font-black mt-1 font-mono tracking-tight ${isPositive ? 'text-teal-400' : 'text-rose-500'}`}>
+                            {balance.toLocaleString()}đ
+                          </p>
+                        </div>
+                        <div className={`p-2 bg-white/5 rounded-xl ${isPositive ? 'text-teal-400' : 'text-rose-500'} group-hover:scale-110 transition-transform`}>
+                          <Wallet className="w-5 h-5" />
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-zinc-500 mt-2 italic font-medium">Lợi nhuận ròng hiện tại</p>
+                    </div>
+                  );
+                })()}
+
+                {/* Transactions count */}
+                <div className="bg-zinc-950/60 backdrop-blur-md border border-white/10 hover:border-[#CCFF00]/40 p-4 rounded-3xl transition-all duration-300 relative overflow-hidden group shadow-xl">
+                  <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-500 to-sky-400 opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[9px] font-black font-mono text-zinc-500 uppercase tracking-widest">SỐ LƯỢT GIAO DỊCH</p>
+                      <p className="text-2xl font-black text-blue-400 mt-1 font-mono tracking-tight">
+                        {transactions.length}
+                      </p>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-xl text-blue-400 group-hover:scale-110 transition-transform">
+                      <History className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-2 italic font-medium">Tổng hóa đơn phát sinh</p>
+                </div>
+              </div>
+
+              {/* Segment Filters for Treasury Type */}
+              {(() => {
+                // Inline local state alternative: look up/set a custom state from state variable, or check if we can declare a helper state above
+                return (
+                  <div className="flex items-center justify-between gap-4 shrink-0 flex-col sm:flex-row">
+                    <div className="flex items-center gap-1.5 p-1 bg-zinc-950/80 border border-white/10 rounded-2xl overflow-x-auto custom-scrollbar w-full sm:w-auto">
+                      {[
+                        { id: "ALL", label: "Tất cả giao dịch", count: transactions.length },
+                        { id: "INCOME", label: "Khoản thu (+)", count: transactions.filter(t => t.type === "INCOME").length },
+                        { id: "EXPENSE", label: "Khoản chi (-)", count: transactions.filter(t => t.type === "EXPENSE").length },
+                      ].map((tier) => {
+                        const isSelected = (memberStatusFilter === tier.id) || (tier.id === "ALL" && memberStatusFilter !== "INCOME" && memberStatusFilter !== "EXPENSE");
+                        return (
+                          <button
+                            key={tier.id}
+                            onClick={() => {
+                              // We can reuse our memberStatusFilter or staffStatusFilter as a general state wrapper if needed, or simply let memberStatusFilter act as the toggle!
+                              // Wait, let's use memberStatusFilter since it's already there and handles ALL/INCOME/EXPENSE
+                              setMemberStatusFilter(tier.id);
+                            }}
+                            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-2 whitespace-nowrap active:scale-95 ${
+                              isSelected
+                                ? "bg-[#CCFF00] text-black shadow-[0_4px_20px_rgba(204,255,0,0.25)]"
+                                : "text-zinc-400 hover:text-white hover:bg-white/5"
+                            }`}
+                          >
+                            {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />}
+                            <span>{tier.label}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-black ${
+                              isSelected ? "bg-black/10 text-black" : "bg-white/5 text-zinc-500"
+                            }`}>
+                              {tier.count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Ledger Table Board */}
+              <div className="bg-zinc-950/40 border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl flex-1 flex flex-col">
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="sticky top-0 bg-zinc-950 z-10">
-                      <tr className="text-xs font-black font-mono text-zinc-400 uppercase tracking-widest border-b border-white/5">
-                        <th className="px-8 py-5">Ngày</th>
-                        <th className="px-8 py-5 text-center">Loại</th>
+                  <table className="w-full text-left">
+                    <thead className="sticky top-0 bg-zinc-950/90 backdrop-blur-md z-20">
+                      <tr className="text-[10px] font-black font-mono text-zinc-500 uppercase tracking-widest border-b border-white/10">
+                        <th className="px-8 py-5">Ngày đặt</th>
+                        <th className="px-8 py-5 text-center">Phân loại</th>
                         <th className="px-8 py-5">Khách hàng</th>
-                        <th className="px-8 py-5">Danh mục</th>
-                        <th className="px-8 py-5 italic">Ghi chú</th>
-                        <th className="px-8 py-5 text-right">Số tiền</th>
+                        <th className="px-8 py-5">Nghiệp vụ / Danh mục</th>
+                        <th className="px-8 py-5 italic text-zinc-500">Chi tiết / Ghi chú</th>
+                        <th className="px-8 py-5 text-right">Số dư / Tiền mặt</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/[0.02]">
-                      {transactions.filter(t => 
-                        t.category.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                        t.note.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        (t.customerName || "").toLowerCase().includes(searchTerm.toLowerCase())
-                      ).map((t) => (
-                        <tr key={t.id} className="hover:bg-white/[0.01] transition-colors group">
-                          <td className="px-8 py-5">
-                            <div className="text-[10px] font-black text-white uppercase italic">{t.date}</div>
+                    <tbody className="divide-y divide-white/5">
+                      {transactions.filter(t => {
+                        const matchesSearch = t.category.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                              t.note.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                              (t.customerName || "").toLowerCase().includes(searchTerm.toLowerCase());
+                        const isIncome = memberStatusFilter === "INCOME";
+                        const isExpense = memberStatusFilter === "EXPENSE";
+                        if (isIncome) return matchesSearch && t.type === "INCOME";
+                        if (isExpense) return matchesSearch && t.type === "EXPENSE";
+                        return matchesSearch;
+                      }).map((t) => (
+                        <tr key={t.id} className="hover:bg-white/[0.015] duration-150 transition-colors group">
+                          <td className="px-8 py-4.5">
+                            <div className="text-xs font-black text-white uppercase italic tracking-wider font-mono">{t.date}</div>
                           </td>
-                          <td className="px-8 py-5">
+                          <td className="px-8 py-4.5 text-center">
                             <div className="flex justify-center">
-                              <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase italic ${
-                                t.type === "INCOME" ? 'bg-[#CCFF00]/10 text-[#CCFF00]' : 'bg-red-500/10 text-red-500'
+                              <span className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-widest ${
+                                t.type === "INCOME" ? 'bg-[#CCFF00]/10 text-[#CCFF00] border border-[#CCFF00]/20' : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
                               }`}>
-                                {t.type === "INCOME" ? 'THU' : 'CHI'}
+                                {t.type === "INCOME" ? 'THU (+)' : 'CHI (-)'}
                               </span>
                             </div>
                           </td>
-                          <td className="px-8 py-5">
-                            <div className="text-[10px] font-black text-white uppercase italic truncate max-w-[150px]">
+                          <td className="px-8 py-4.5 font-bold">
+                            <div className="text-sm font-black text-white uppercase italic tracking-tight truncate max-w-[150px]">
                               {t.customerName || '-'}
                             </div>
                           </td>
-                          <td className="px-8 py-5">
-                            <div className="text-[10px] font-bold uppercase text-zinc-300">{t.category}</div>
+                          <td className="px-8 py-4.5">
+                            <div className="text-xs font-black uppercase text-zinc-300 tracking-wider font-mono">{t.category}</div>
                           </td>
-                          <td className="px-8 py-5">
-                            <div className="text-[10px] text-zinc-500 italic max-w-xs truncate">{t.category === "Gia hạn gói tập" ? "Gia hạn" : t.note}</div>
+                          <td className="px-8 py-4.5 font-medium">
+                            <div className="text-xs text-zinc-500 italic max-w-xs truncate">{t.category === "Gia hạn gói tập" ? "Gia hạn" : t.note}</div>
                           </td>
-                          <td className="px-8 py-5 text-right">
-                            <div className={`text-sm font-black italic tracking-tighter ${
+                          <td className="px-8 py-4.5 text-right">
+                            <div className={`text-base font-black italic tracking-tighter ${
                               t.type === "INCOME" ? 'text-[#CCFF00]' : 'text-zinc-400'
                             }`}>
                               {t.type === "INCOME" ? '+' : '-'}{t.amount.toLocaleString()}đ
@@ -6043,7 +6887,7 @@ export default function App() {
                   </table>
                 </div>
               </div>
-            </motion.div>
+            </div>
           ) : activeTab === "pos" ? (
             <motion.div
               initial={{ opacity: 0 }}
@@ -6351,25 +7195,135 @@ export default function App() {
                     <tbody className="divide-y divide-white/[0.02]">
                         {members.filter(m => {
                           const days = (new Date(m.expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24);
-                          return days > 0 && days <= 7;
+                          return m.status === 'Hoạt động' && days > 0 && days <= 7;
                         }).length === 0 ? (
                           <tr>
                             <td colSpan={5} className="py-32 text-center">
                                 <div className="flex flex-col items-center opacity-20">
                                   <Box className="w-12 h-12 mb-4" />
-                                  <p className="text-[10px] font-mono uppercas          ) : (activeTab === "facilities" || activeTab === "maintenance") ? (
+                                  <p className="text-[10px] font-mono uppercase tracking-[0.5em]">KHÔNG CÓ HỘI VIÊN SẮP HẾT HẠN</p>
+                                </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          members.filter(m => {
+                            const days = (new Date(m.expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24);
+                            return m.status === 'Hoạt động' && days > 0 && days <= 7;
+                          }).map(m => {
+                            const days = Math.ceil((new Date(m.expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                            return (
+                              <tr key={m.id} className="hover:bg-white/[0.01] transition-colors group">
+                                <td className="px-8 py-6">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-[#CCFF00]/10 flex items-center justify-center text-[#CCFF00] text-[10px] font-black ring-1 ring-[#CCFF00]/20 italic">{m.fullName.charAt(0)}</div>
+                                    <div className="flex flex-col">
+                                      <span className="text-xs font-black uppercase italic text-white group-hover:text-[#CCFF00] transition-colors">{m.fullName}</span>
+                                      <span className="text-[9px] font-mono text-zinc-500">{m.phone}</span>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-8 py-6 italic text-[11px] text-zinc-400">{m.package}</td>
+                                <td className="px-8 py-6 font-mono text-[11px] text-zinc-400">{m.expiryDate}</td>
+                                <td className="px-8 py-6 font-black italic text-sm text-[#CCFF00]">{days} ngày</td>
+                                <td className="px-8 py-6 text-center">
+                                  <button 
+                                    onClick={() => {
+                                      setRenewingMember(m);
+                                      setIsRenewSelectModalOpen(true);
+                                    }}
+                                    className="bg-[#CCFF00] text-black text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-lg hover:scale-105 active:scale-95 transition-all"
+                                  >
+                                    GIA HẠN GÓI
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </motion.div>
+          ) : activeTab === "invoice-expired" ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-6 pb-0 h-full flex flex-col overflow-hidden px-0"
+            >
+              <div className="bg-zinc-950 border border-white/5 rounded-[2.5rem] shadow-2xl overflow-hidden flex-1 flex flex-col mx-4 md:mx-0">
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                  <table className="w-full text-left border-collapse min-w-[900px]">
+                    <thead className="sticky top-0 bg-zinc-950 z-10">
+                        <tr className="text-[10px] font-black font-mono text-zinc-500 uppercase tracking-widest border-b border-white/5 italic">
+                          <th className="px-8 py-6">HỘI VIÊN</th>
+                          <th className="px-8 py-6">GÓI DỊCH VỤ</th>
+                          <th className="px-8 py-6">NGÀY HẾT HẠN</th>
+                          <th className="px-8 py-6">SỐ NGÀY ĐÃ QUÁ HẠN</th>
+                          <th className="px-8 py-6 text-center">THAO TÁC</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.02]">
+                        {members.filter(m => {
+                          const days = (new Date(m.expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24);
+                          return m.status !== 'Hoạt động' || days <= 0;
+                        }).length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-32 text-center">
+                                <div className="flex flex-col items-center opacity-20">
+                                  <Box className="w-12 h-12 mb-4" />
+                                  <p className="text-[10px] font-mono uppercase tracking-[0.5em]">KHÔNG CÓ HỘI VIÊN ĐÃ HẾT HẠN</p>
+                                </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          members.filter(m => {
+                            const days = (new Date(m.expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24);
+                            return m.status !== 'Hoạt động' || days <= 0;
+                          }).map(m => {
+                            const days = Math.abs(Math.floor((new Date(m.expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)));
+                            return (
+                              <tr key={m.id} className="hover:bg-white/[0.01] transition-colors group">
+                                <td className="px-8 py-6">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500 text-[10px] font-black ring-1 ring-red-500/20 italic">{m.fullName.charAt(0)}</div>
+                                    <div className="flex flex-col">
+                                      <span className="text-xs font-black uppercase italic text-white group-hover:text-red-500 transition-colors">{m.fullName}</span>
+                                      <span className="text-[9px] font-mono text-zinc-500">{m.phone}</span>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-8 py-6 italic text-[11px] text-zinc-400">{m.package}</td>
+                                <td className="px-8 py-6 font-mono text-[11px] text-zinc-400">{m.expiryDate}</td>
+                                <td className="px-8 py-6 font-black italic text-sm text-red-500">{days} ngày</td>
+                                <td className="px-8 py-6 text-center">
+                                  <button 
+                                    onClick={() => {
+                                      setRenewingMember(m);
+                                      setIsRenewSelectModalOpen(true);
+                                    }}
+                                    className="bg-[#CCFF00] text-black text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-lg hover:scale-105 active:scale-95 transition-all"
+                                  >
+                                    GIA HẠN GÓI
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </motion.div>
+          ) : activeTab === "facilities" ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="space-y-6 h-full flex flex-col overflow-hidden px-5 md:px-0"
             >
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
-                <div>
-                  <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white leading-none">QUẢN LÝ CƠ SỞ VẬT CHẤT</h2>
-                  <p className="text-[#CCFF00] text-[10px] font-mono mt-2 uppercase tracking-widest leading-none">THIẾT BỊ PHÒNG TẬP VÀ KẾ HOẠCH BẢO TRÌ SỬA CHỮA CHI TIẾT</p>
-                </div>
-                
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="flex flex-col md:flex-row md:items-center justify-end gap-3 shrink-0">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
                   <div className="relative group flex-1 md:w-64">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-hover:text-[#CCFF00] transition-colors" />
                     <input
@@ -6381,53 +7335,17 @@ export default function App() {
                     />
                   </div>
                   
-                  {facilitiesSubTab === "assets" ? (
-                    <button 
-                      onClick={() => { setEditingEquipment(null); setIsEquipmentModalOpen(true); }}
-                      className="flex items-center justify-center gap-2 bg-[#CCFF00] text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-[0_10px_20px_rgba(204,255,0,0.1)] hover:scale-105 active:scale-95 transition-all outline-none border-none"
-                    >
-                      <Plus className="w-4 h-4" />
-                      THÊM THIẾT BỊ MỚI
-                    </button>
-                  ) : (
-                    <button 
-                      onClick={() => { setEditingMaintenance(null); setIsMaintenanceModalOpen(true); }}
-                      className="flex items-center justify-center gap-2 bg-[#CCFF00] text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-[0_10px_20px_rgba(204,255,0,0.1)] hover:scale-105 active:scale-95 transition-all outline-none border-none"
-                    >
-                      <Plus className="w-4 h-4" />
-                      LÊN LỊCH SỬA CHỮA
-                    </button>
-                  )}
+                  <button 
+                    onClick={() => { setEditingEquipment(null); setIsEquipmentModalOpen(true); }}
+                    className="flex items-center justify-center gap-2 bg-[#CCFF00] text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-[0_10px_20px_rgba(204,255,0,0.15)] hover:scale-105 active:scale-95 transition-all outline-none border-none"
+                  >
+                    <Plus className="w-4 h-4" />
+                    THÊM THIẾT BỊ MỚI
+                  </button>
                 </div>
               </div>
 
-              <div className="flex border-b border-white/5 gap-6 shrink-0 pt-2">
-                <button
-                  onClick={() => setFacilitiesSubTab('assets')}
-                  className={`pb-4 px-2 text-xs font-black uppercase tracking-widest relative transition-all ${
-                    facilitiesSubTab === 'assets' ? 'text-[#CCFF00]' : 'text-zinc-500 hover:text-white'
-                  }`}
-                >
-                  Danh sách thiết bị
-                  {facilitiesSubTab === 'assets' && (
-                    <motion.div layoutId="fac-sub-tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#CCFF00]" />
-                  )}
-                </button>
-                <button
-                  onClick={() => setFacilitiesSubTab('maintenance')}
-                  className={`pb-4 px-2 text-xs font-black uppercase tracking-widest relative transition-all ${
-                    facilitiesSubTab === 'maintenance' ? 'text-[#CCFF00]' : 'text-zinc-500 hover:text-white'
-                  }`}
-                >
-                  Lịch sửa chữa & Bảo trì ({maintenanceTasks.length})
-                  {facilitiesSubTab === 'maintenance' && (
-                    <motion.div layoutId="fac-sub-tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#CCFF00]" />
-                  )}
-                </button>
-              </div>
-
-              {facilitiesSubTab === "assets" ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto custom-scrollbar pb-10 flex-1 min-h-0">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto custom-scrollbar pb-10 flex-1 min-h-0">
                   {equipments.filter(eq => 
                     eq.name.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
                     eq.code.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
@@ -6447,101 +7365,64 @@ export default function App() {
                       eq.category.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
                       eq.location.toLowerCase().includes(equipmentSearch.toLowerCase())
                     ).map((eq) => {
-                      const statusText = eq.status === 'NORMAL' ?                         <tbody className="divide-y divide-white/[0.02]">
-                          {maintenanceTasks.filter(task => 
-                            task.equipmentName.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
-                            task.performer.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
-                            task.taskType.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
-                            (task.notes && task.notes.toLowerCase().includes(equipmentSearch.toLowerCase()))
-                          ).length === 0 ? (
-                            <tr>
-                              <td colSpan={6} className="py-32 text-center">
-                                 <div className="flex flex-col items-center opacity-20">
-                                    <Calendar className="w-12 h-12 mb-4" />
-                                    <p className="text-[10px] font-mono uppercase tracking-[0.5em]">KHÔNG CÓ LỊCH SỬA CHỮA NÀO</p>
-                                 </div>
-                              </td>
-                            </tr>
-                          ) : (
-                            maintenanceTasks.filter(task => 
-                              task.equipmentName.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
-                              task.performer.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
-                              task.taskType.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
-                              (task.notes && task.notes.toLowerCase().includes(equipmentSearch.toLowerCase()))
-                            ).map((task) => {
-                              const priorityText = task.priority === 'HIGH' ? 'Cao / Khẩn cấp' :
-                                                   task.priority === 'MEDIUM' ? 'Trung bình' : 'Thấp';
-                              const priorityColor = task.priority === 'HIGH' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                                                    task.priority === 'MEDIUM' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
-                                                    'bg-zinc-500/10 text-zinc-500 border-zinc-500/20';
+                      const statusColor = eq.status === 'NORMAL' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                                          eq.status === 'MAINTENANCE_REQUIRED' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
+                                          eq.status === 'BROKEN' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                                          'bg-[#CCFF00]/10 text-[#CCFF00] border-[#CCFF00]/20';
+                      const statusText = eq.status === 'NORMAL' ? t('normal') :
+                                         eq.status === 'MAINTENANCE_REQUIRED' ? t('needMaintenance') :
+                                         eq.status === 'BROKEN' ? t('broken') :
+                                         t('underMaintenance');
+                      return (
+                        <div key={eq.id} className="bg-zinc-950 border border-white/5 rounded-3xl p-6 flex flex-col justify-between hover:border-[#CCFF00]/20 transition-all group relative">
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest italic">{eq.category} // {eq.code}</span>
+                              <h3 className="text-base font-black uppercase italic text-white group-hover:text-[#CCFF00] transition-colors mt-1">{eq.name}</h3>
+                            </div>
+                            <span className={`px-2.5 py-1 rounded-md text-[8px] font-black uppercase tracking-wider border ${statusColor}`}>
+                              {statusText}
+                            </span>
+                          </div>
+                          
+                          <div className="space-y-2 mb-6 font-mono text-[10px] text-zinc-500">
+                            <div className="flex justify-between">
+                              <span className="uppercase">Vị trí:</span>
+                              <span className="text-zinc-400 font-bold">{eq.location}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="uppercase">Bình thường gần nhất:</span>
+                              <span className="text-zinc-400 font-bold">{eq.lastMaintenance}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="uppercase">Bảo trì kế tiếp:</span>
+                              <span className="text-[#CCFF00] font-bold">{eq.nextMaintenance}</span>
+                            </div>
+                          </div>
 
-                              const typeText = task.taskType === 'ROUTINE' ? 'Bảo trì định kỳ' :
-                                               task.taskType === 'REPAIR' ? 'Khắc phục hỏng hóc' : 'Kiểm định định kỳ';
-
-                              const statusText = task.status === 'COMPLETED' ? 'Đã hoàn thành' :
-                                                 task.status === 'IN_PROGRESS' ? 'Đang thực hiện' :
-                                                 task.status === 'PENDING' ? 'Mới lên lịch' : 'Đã hủy bỏ';
-
-                              return (
-                                <tr key={task.id} className="hover:bg-white/[0.01] transition-colors group">
-                                   <td className="px-8 py-6">
-                                      <div className="flex flex-col">
-                                        <span className="text-xs font-black uppercase italic text-white leading-none">{task.equipmentName}</span>
-                                        <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest mt-2 italic">{typeText}</span>
-                                      </div>
-                                   </td>
-                                   <td className="px-8 py-6 font-mono text-xs text-zinc-400">{task.scheduledDate}</td>
-                                   <td className="px-8 py-6 text-xs text-zinc-300 font-medium">{task.performer || "Chưa phân công"}</td>
-                                   <td className="px-8 py-6">
-                                      <div className={`inline-flex px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${priorityColor}`}>
-                                        {priorityText}
-                                      </div>
-                                   </td>
-                                   <td className="px-8 py-6">
-                                      <div className={`inline-flex items-center gap-2 text-[10px] font-black uppercase italic tracking-widest ${
-                                        task.status === 'COMPLETED' ? 'text-emerald-500' :
-                                        task.status === 'IN_PROGRESS' ? 'text-[#CCFF00]' :
-                                        task.status === 'PENDING' ? 'text-zinc-500' : 'text-red-500'
-                                      }`}>
-                                        <div className={`w-1.5 h-1.5 rounded-full ${
-                                           task.status === 'COMPLETED' ? 'bg-emerald-500' :
-                                           task.status === 'IN_PROGRESS' ? 'bg-[#CCFF00] animate-pulse' :
-                                           task.status === 'PENDING' ? 'bg-zinc-700' : 'bg-red-600'
-                                        }`} />
-                                        {statusText}
-                                      </div>
-                                   </td>
-                                   <td className="px-8 py-6 text-center">
-                                      <div className="flex justify-center gap-2">
-                                        <button 
-                                          onClick={() => { setEditingMaintenance(task); setIsMaintenanceModalOpen(true); }}
-                                          className="p-2 bg-white/5 rounded-lg text-zinc-400 hover:text-[#CCFF00] hover:bg-[#CCFF00]/10 transition-all border border-transparent hover:border-[#CCFF00]/20"
-                                        >
-                                          <Edit2 className="w-4 h-4" />
-                                        </button>
-                                        <button 
-                                          onClick={() => handleDeleteMaintenance(task.id)}
-                                          className="p-2 bg-white/5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-500/10 transition-all border border-transparent hover:border-[#CCFF00]/20"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                        </button>
-                                      </div>
-                                   </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                     </table>
-                   </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => { setEditingEquipment(eq); setIsEquipmentModalOpen(true); }}
+                              className="flex-1 py-3 bg-white/5 border border-white/5 text-zinc-400 hover:text-[#CCFF00] hover:bg-[#CCFF00]/10 hover:border-[#CCFF00]/20 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
+                            >
+                              CHỈNH SỬA
+                            </button>
+                            <button
+                              onClick={() => handleDeleteEquipment(eq.id)}
+                              className="px-3 bg-white/5 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
-              )}
-            </motion.div>ody>
-                     </table>
-                   </div>
-                </div>
-              )}
-            </motion.div>assName="space-y-6 h-full flex flex-col overflow-hidden px-5 md:px-0"
+            </motion.div>
+          ) : activeTab === "maintenance" ? (
+            <motion.div
+              className="space-y-6 h-full flex flex-col overflow-hidden px-5 md:px-0"
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
                 <div>
@@ -6850,7 +7731,7 @@ export default function App() {
       </main>
 
       {/* Bottom Navigation Bar (Mobile Only) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-[110] px-4 pb-4 pt-2 bg-gradient-to-t from-zinc-950 via-zinc-950/90 to-transparent pointer-events-none md:hidden backdrop-blur-sm">
+      <nav className={`fixed bottom-0 left-0 right-0 z-[110] px-4 pb-4 pt-2 pointer-events-none md:hidden transition-all duration-300 ${activeTab === "staff" ? "bg-transparent backdrop-blur-none" : "bg-gradient-to-t from-zinc-950 via-zinc-950/90 to-transparent backdrop-blur-sm"}`}>
         <div className="bg-zinc-900/90 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-1.5 flex items-center justify-around shadow-[0_-10px_40px_rgba(0,0,0,0.8)] pointer-events-auto max-w-sm mx-auto">
           {[
             { id: "dashboard", label: t('dashboard'), icon: LayoutDashboard },
